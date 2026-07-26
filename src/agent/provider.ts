@@ -15,7 +15,7 @@ interface ProviderRequest {
   timeoutMs?: number;
 }
 
-type FetchImplementation = (
+export type FetchImplementation = (
   input: string | URL | Request,
   init?: RequestInit,
 ) => Promise<Response>;

@@ -5,6 +5,7 @@ import { buildSystemPrompt } from "./prompt";
 import {
   ProviderError,
   requestChatCompletion,
+  type FetchImplementation,
   type ProviderConfig,
 } from "./provider";
 import { sanitizeModelText } from "./sanitize";
@@ -52,8 +53,8 @@ describe("grounded prompt", () => {
 
 describe("provider adapter", () => {
   it("posts an OpenAI-compatible request and returns sanitized text", async () => {
-    const fetchImpl = vi.fn(
-      async (_input: string | URL | Request, _init?: RequestInit) =>
+    const fetchImpl = vi.fn<FetchImplementation>(
+      async () =>
         Response.json({
           choices: [
             {
@@ -86,8 +87,8 @@ describe("provider adapter", () => {
   });
 
   it("passes an image on the latest user turn", async () => {
-    const fetchImpl = vi.fn(
-      async (_input: string | URL | Request, _init?: RequestInit) =>
+    const fetchImpl = vi.fn<FetchImplementation>(
+      async () =>
         Response.json({
           choices: [{ message: { content: "已查看图片。" } }],
         }),
@@ -114,8 +115,8 @@ describe("provider adapter", () => {
   });
 
   it("maps upstream timeouts to a safe recoverable error", async () => {
-    const fetchImpl = vi.fn(
-      async (_input: string | URL | Request, _init?: RequestInit) =>
+    const fetchImpl = vi.fn<FetchImplementation>(
+      async () =>
         await new Promise<Response>((_, reject) => {
           reject(new DOMException("aborted", "AbortError"));
         }),
@@ -137,8 +138,8 @@ describe("provider adapter", () => {
   });
 
   it("does not expose an upstream response body in errors", async () => {
-    const fetchImpl = vi.fn(
-      async (_input: string | URL | Request, _init?: RequestInit) =>
+    const fetchImpl = vi.fn<FetchImplementation>(
+      async () =>
         Response.json(
           { error: { message: "sensitive upstream details" } },
           { status: 500 },
