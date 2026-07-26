@@ -3,13 +3,18 @@
 # Dependencies and build output
 node_modules/
 .next/
+.vinext/
+.wrangler/
+dist/
 coverage/
 playwright-report/
 test-results/
+*.tsbuildinfo
 
 # Local configuration and logs
 .env
 .env.local
 .env.*.local
+.dev.vars
 *.log
 .DS_Store
