@@ -13,7 +13,7 @@
   --signal-dark: #c83d0d;
   --signal-wash: #ffe4d8;
   --success: #2f7658;
-  --warning: #a85f00;
+  --warning: #8f4d00;
   --shadow: 0 24px 70px rgba(33, 31, 25, 0.11);
 }
 
@@ -152,6 +152,32 @@ label:focus-within {
   gap: 9px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.new-chat-button {
+  display: inline-flex;
+  min-height: 36px;
+  padding: 0 12px;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  font-weight: 600;
+  gap: 7px;
+  letter-spacing: 0.04em;
+}
+
+.new-chat-button:hover {
+  border-color: var(--signal);
+  color: var(--signal-dark);
 }
 
 .status-dot {
@@ -357,7 +383,7 @@ label:focus-within {
   color: var(--signal-dark);
 }
 
-.welcome h1 {
+.welcome h2 {
   max-width: 870px;
   margin: clamp(36px, 5vh, 58px) 0 24px;
   font-size: clamp(44px, 5.6vw, 78px);
@@ -366,13 +392,13 @@ label:focus-within {
   line-height: 1.04;
 }
 
-.welcome h1 span {
+.welcome h2 span {
   position: relative;
   display: inline-block;
   color: var(--signal);
 }
 
-.welcome h1 span::after {
+.welcome h2 span::after {
   position: absolute;
   right: 0;
   bottom: -6px;
@@ -712,7 +738,7 @@ label:focus-within {
 }
 
 .composer,
-.composer-note,
+.composer-meta,
 .error-banner,
 .attachment-chip {
   width: min(920px, 100%);
@@ -813,13 +839,27 @@ label:focus-within {
   opacity: 0.42;
 }
 
-.composer-note {
+.composer-meta {
+  display: grid;
   margin-top: 10px;
-  margin-bottom: 0;
+  align-items: center;
   color: var(--muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  gap: 12px;
+  grid-template-columns: auto 1fr auto;
+}
+
+.composer-note {
+  margin: 0;
+  font-family: var(--font-noto-sans), sans-serif;
   font-size: 9px;
   line-height: 1.5;
   text-align: center;
+}
+
+.character-count {
+  min-width: 62px;
 }
 
 .error-banner,
@@ -831,6 +871,14 @@ label:focus-within {
   margin-bottom: 8px;
   font-size: 10px;
   gap: 8px;
+}
+
+.attachment-chip img {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  object-fit: cover;
 }
 
 .error-banner {
@@ -910,7 +958,7 @@ label:focus-within {
     padding-left: 45px;
   }
 
-  .welcome h1 {
+  .welcome h2 {
     font-size: clamp(42px, 6vw, 62px);
   }
 }
@@ -934,9 +982,23 @@ label:focus-within {
     font-size: 9px;
   }
 
+  .topbar-actions {
+    gap: 10px;
+  }
+
+  .new-chat-button {
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
   .workspace {
-    display: block;
-    min-height: calc(100svh - 64px);
+    display: grid;
+    height: calc(100svh - 64px);
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .role-panel {
@@ -990,8 +1052,8 @@ label:focus-within {
   }
 
   .conversation-panel {
-    height: calc(100svh - 132px);
-    min-height: 620px;
+    height: auto;
+    min-height: 0;
   }
 
   .welcome {
@@ -1002,7 +1064,7 @@ label:focus-within {
     font-size: 8px;
   }
 
-  .welcome h1 {
+  .welcome h2 {
     margin-top: 31px;
     font-size: clamp(37px, 11.5vw, 52px);
     letter-spacing: -0.065em;
@@ -1069,6 +1131,14 @@ label:focus-within {
 
   .send-button {
     min-width: 120px;
+  }
+
+  .composer-meta {
+    grid-template-columns: auto 1fr;
+  }
+
+  .composer-meta > span:last-child {
+    display: none;
   }
 }
 

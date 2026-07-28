@@ -28,6 +28,12 @@ describe("Blum Agent workspace", () => {
     const user = userEvent.setup();
     render(<BlumAgent />);
 
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Blum Agent 百隆五金智能工作台",
+      }),
+    ).toBeInTheDocument();
     const installer = screen.getByRole("button", { name: /安装工/ });
     await user.click(installer);
 
@@ -82,6 +88,9 @@ describe("Blum Agent workspace", () => {
       input,
       new File(["image"], "hinge.png", { type: "image/png" }),
     );
+    expect(
+      await screen.findByRole("img", { name: "待发送图片：hinge.png" }),
+    ).toBeInTheDocument();
     const remove = await screen.findByRole("button", {
       name: "移除图片 hinge.png",
     });
@@ -113,6 +122,39 @@ describe("Blum Agent workspace", () => {
       );
     });
     expect(screen.getByRole("button", { name: "发送问题" })).toBeEnabled();
+  });
+
+  it("starts a clean conversation after an answer", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(liveResponse)));
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "什么是百隆？");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    expect(await screen.findByText(liveResponse.answer)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "开始新对话" }));
+
+    expect(screen.queryByText(liveResponse.answer)).not.toBeInTheDocument();
+    expect(screen.getByText(/从一个问题开始/)).toBeInTheDocument();
+    expect(screen.getByLabelText("向 Blum Agent 提问")).toHaveFocus();
+  });
+
+  it("submits with Enter, preserves Shift+Enter and exposes the input limit", async () => {
+    const fetchMock = vi.fn(async () => Response.json(liveResponse));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+    const input = screen.getByLabelText("向 Blum Agent 提问");
+
+    expect(input).toHaveAttribute("maxlength", "4000");
+    await user.type(input, "第一行{shift>}{enter}{/shift}第二行");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(input).toHaveValue("第一行\n第二行");
+    expect(screen.getByText("7 / 4000")).toBeInTheDocument();
+
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
   });
 
   it("explains when a precise question uses the guarded review path", async () => {

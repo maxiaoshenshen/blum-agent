@@ -1,6 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import Image from "next/image";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { ROLES } from "@/src/domain/roles";
 import type { ChatAnswer, SourceReference } from "@/src/agent/chat";
 import type { ChatMessage } from "@/src/agent/schema";
@@ -17,6 +24,7 @@ import {
   House,
   ImagePlus,
   LoaderCircle,
+  RefreshCcw,
   Send,
   ShoppingCart,
   Sparkles,
@@ -82,11 +90,19 @@ export function BlumAgent() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
+  const activeRequestRef = useRef<AbortController | null>(null);
+  const requestVersionRef = useRef(0);
 
   const selectedRole = useMemo(
     () => ROLES.find((role) => role.id === roleId)!,
     [roleId],
   );
+
+  useEffect(() => {
+    const container = conversationRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [messages, isLoading]);
 
   function chooseStarter(prompt: string) {
     setDraft(prompt);
@@ -137,6 +153,11 @@ export function BlumAgent() {
     setDraft("");
     setError("");
     setIsLoading(true);
+    const requestVersion = requestVersionRef.current + 1;
+    requestVersionRef.current = requestVersion;
+    const controller = new AbortController();
+    activeRequestRef.current?.abort();
+    activeRequestRef.current = controller;
 
     try {
       const response = await fetch("/api/chat", {
@@ -147,6 +168,7 @@ export function BlumAgent() {
           messages: apiMessages(nextMessages),
           image: attachment?.dataUrl,
         }),
+        signal: controller.signal,
       });
       const body = (await response.json()) as
         | ChatAnswer
@@ -160,6 +182,7 @@ export function BlumAgent() {
         );
       }
 
+      if (requestVersion !== requestVersionRef.current) return;
       setMessages((current) => [
         ...current,
         {
@@ -174,6 +197,12 @@ export function BlumAgent() {
       ]);
       setAttachment(null);
     } catch (caught) {
+      if (
+        requestVersion !== requestVersionRef.current ||
+        (caught instanceof DOMException && caught.name === "AbortError")
+      ) {
+        return;
+      }
       setDraft(question);
       setError(
         caught instanceof Error
@@ -181,12 +210,28 @@ export function BlumAgent() {
           : "暂时无法获得回答，请稍后重试。",
       );
     } finally {
-      setIsLoading(false);
+      if (requestVersion === requestVersionRef.current) {
+        setIsLoading(false);
+        activeRequestRef.current = null;
+      }
     }
+  }
+
+  function startNewConversation() {
+    requestVersionRef.current += 1;
+    activeRequestRef.current?.abort();
+    activeRequestRef.current = null;
+    setMessages([]);
+    setDraft("");
+    setAttachment(null);
+    setError("");
+    setIsLoading(false);
+    inputRef.current?.focus();
   }
 
   return (
     <main className="agent-shell">
+      <h1 className="sr-only">Blum Agent 百隆五金智能工作台</h1>
       <header className="topbar">
         <a className="brand" href="#workspace" aria-label="Blum Agent 首页">
           <span className="brand-mark" aria-hidden="true">
@@ -197,9 +242,19 @@ export function BlumAgent() {
             <small>百隆五金智能工作台</small>
           </span>
         </a>
-        <div className="system-status" aria-label="系统状态">
-          <span className="status-dot" aria-hidden="true" />
-          官方资料优先
+        <div className="topbar-actions">
+          <button
+            className="new-chat-button"
+            onClick={startNewConversation}
+            type="button"
+          >
+            <RefreshCcw aria-hidden="true" size={15} />
+            开始新对话
+          </button>
+          <div className="system-status" aria-label="系统状态">
+            <span className="status-dot" aria-hidden="true" />
+            官方资料优先
+          </div>
         </div>
       </header>
 
@@ -257,18 +312,22 @@ export function BlumAgent() {
         </aside>
 
         <section className="conversation-panel" aria-label="Blum Agent 对话">
-          <div className="conversation-scroll" aria-live="polite">
+          <div
+            className="conversation-scroll"
+            aria-live="polite"
+            ref={conversationRef}
+          >
             {messages.length === 0 ? (
               <div className="welcome">
                 <div className="welcome-kicker">
                   <span>BLUM / KNOWLEDGE SYSTEM</span>
                   <span>角色：{selectedRole.label}</span>
                 </div>
-                <h1>
+                <h2>
                   从一个问题开始，
                   <br />
                   把五金方案做到<span>有据可查。</span>
-                </h1>
+                </h2>
                 <p>{selectedRole.description}</p>
                 <div className="starter-grid">
                   {selectedRole.starterPrompts.map((prompt, index) => (
@@ -409,7 +468,13 @@ export function BlumAgent() {
             ) : null}
             {attachment ? (
               <div className="attachment-chip">
-                <ImagePlus aria-hidden="true" size={16} />
+                <Image
+                  alt={`待发送图片：${attachment.name}`}
+                  height={30}
+                  src={attachment.dataUrl}
+                  unoptimized
+                  width={30}
+                />
                 <span>{attachment.name}</span>
                 <button
                   aria-label={`移除图片 ${attachment.name}`}
@@ -427,6 +492,7 @@ export function BlumAgent() {
               <textarea
                 disabled={isLoading}
                 id="agent-question"
+                maxLength={4000}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
@@ -467,9 +533,15 @@ export function BlumAgent() {
                 </button>
               </div>
             </form>
-            <p className="composer-note">
-              型号、尺寸、承重、孔位与最终下单信息，请以当前市场官方资料复核。
-            </p>
+            <div className="composer-meta">
+              <span aria-live="polite" className="character-count">
+                {draft.length} / 4000
+              </span>
+              <p className="composer-note">
+                型号、尺寸、承重、孔位与最终下单信息，请以当前市场官方资料复核。
+              </p>
+              <span aria-hidden="true">Enter 发送 · Shift+Enter 换行</span>
+            </div>
           </div>
         </section>
       </div>

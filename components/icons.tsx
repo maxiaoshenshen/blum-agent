@@ -11,6 +11,7 @@ export {
   ImagePlus,
   LoaderCircle,
   Paperclip,
+  RefreshCcw,
   Send,
   ShoppingCart,
   Sparkles,
