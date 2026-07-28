@@ -49,6 +49,14 @@ describe("official knowledge retrieval", () => {
     expect(ids).toContain("easy-assembly");
   });
 
+  it.each([
+    ["MINIPRESS top 配 EASYSTICK 怎样从 BXF 加工？", "processing-devices"],
+    ["SPACE TOWER 高柜怎么规划？", "cabinet-applications"],
+    ["哪里下载产品 CAD 和加工图？", "product-data"],
+  ])("routes %s to the expanded official knowledge area", (question, id) => {
+    expect(retrieveKnowledge(question)[0].source.id).toBe(id);
+  });
+
   it("returns bounded generic official sources for an unknown Blum question", () => {
     const matches = retrieveKnowledge("这是一个没有产品关键词的问题", 3);
 
