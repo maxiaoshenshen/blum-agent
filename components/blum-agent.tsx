@@ -203,6 +203,9 @@ export function BlumAgent() {
       ) {
         return;
       }
+      setMessages((current) =>
+        current.filter((message) => message.id !== userMessage.id),
+      );
       setDraft(question);
       setError(
         caught instanceof Error

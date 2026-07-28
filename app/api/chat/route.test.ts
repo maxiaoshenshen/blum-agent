@@ -67,4 +67,43 @@ describe("POST /api/chat", () => {
       },
     });
   });
+
+  it("requires JSON and bounds the request before parsing it", async () => {
+    const wrongType = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: "{}",
+      }),
+    );
+    expect(wrongType.status).toBe(415);
+    expect(await wrongType.json()).toMatchObject({
+      error: { code: "unsupported_media_type" },
+    });
+
+    const oversized = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": "7500001",
+        },
+        body: "{}",
+      }),
+    );
+    expect(oversized.status).toBe(413);
+    expect(await oversized.json()).toMatchObject({
+      error: { code: "request_too_large" },
+    });
+  });
+
+  it("adds no-store and content-sniffing protection to every response", async () => {
+    const response = await post({
+      role: "designer",
+      messages: [{ role: "user", content: "" }],
+    });
+
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
 });

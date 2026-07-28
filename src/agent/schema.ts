@@ -68,6 +68,20 @@ function parseMessages(value: unknown): ChatMessage[] {
     throw new ValidationError("missing_message", "请先输入一个关于 Blum 的问题。");
   }
 
+  const hasInvalidOrder =
+    messages[0]?.role !== "user" ||
+    messages.at(-1)?.role !== "user" ||
+    messages.some(
+      (message, index) =>
+        index > 0 && message.role === messages[index - 1]?.role,
+    );
+  if (hasInvalidOrder) {
+    throw new ValidationError(
+      "invalid_message_order",
+      "对话消息顺序无效，请开启新对话后重试。",
+    );
+  }
+
   const totalLength = messages.reduce(
     (sum, message) => sum + message.content.length,
     0,

@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point for Blum Agent. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { FixedWindowRateLimiter } from "../src/security/rate-limit";
 
 interface Env {
   ASSETS: Fetcher;
@@ -18,6 +19,31 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+} as const;
+
+const chatRateLimiter = new FixedWindowRateLimiter({
+  limit: 30,
+  windowMs: 60_000,
+  maxEntries: 10_000,
+});
+
+function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 // Image security config. SVG sources with .svg extension auto-skip the
 // optimization endpoint on the client side (served directly, no proxy).
 // To route SVGs through the optimizer (with security headers), set
@@ -28,18 +54,48 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.pathname === "/api/chat" && request.method === "POST") {
+      const clientIdentity = request.headers
+        .get("cf-connecting-ip")
+        ?.trim()
+        .slice(0, 64);
+      if (clientIdentity) {
+        const decision = chatRateLimiter.attempt(clientIdentity);
+        if (!decision.allowed) {
+          return withSecurityHeaders(
+            Response.json(
+              {
+                error: {
+                  code: "rate_limited",
+                  message: "请求较多，请稍后再试。",
+                },
+              },
+              {
+                status: 429,
+                headers: {
+                  "Cache-Control": "no-store, max-age=0",
+                  "Retry-After": String(decision.retryAfterSeconds),
+                },
+              },
+            ),
+          );
+        }
+      }
+    }
+
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
+      const response = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
         transformImage: async (body, { width, format, quality }) => {
           const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
           return result.response();
         },
       }, allowedWidths);
+      return withSecurityHeaders(response);
     }
 
-    return handler.fetch(request, env, ctx);
+    return withSecurityHeaders(await handler.fetch(request, env, ctx));
   },
 };
 

@@ -28,9 +28,18 @@ npm run dev
 PROVIDER_BASE_URL=https://your-provider.example
 PROVIDER_API_KEY=replace-with-your-secret
 PROVIDER_MODEL=your-model
+PUBLIC_SITE_URL=https://blum-agent.example.com
 ```
 
 模型凭证只在服务端读取，禁止提交 `.env.local`。
+
+## 生产安全
+
+- API 仅接受 `application/json`，请求体上限 7.5 MB，响应禁止缓存
+- Cloudflare Worker 按客户端限制聊天请求为 30 次/分钟
+- 页面统一设置防嗅探、防嵌入、Referrer 与浏览器能力限制响应头
+- 模型输出始终作为纯文本渲染，不执行 HTML；公开站点 URL 只接受受控 HTTPS 配置
+- `npm audit --omit=dev` 必须保持 0 漏洞
 
 ## 质量门禁
 

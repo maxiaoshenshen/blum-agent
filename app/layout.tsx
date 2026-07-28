@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Noto_Sans_SC } from "next/font/google";
-import { headers } from "next/headers";
+import { publicSiteUrlFromEnvironment } from "@/src/security/site-url";
 import "./globals.css";
 
 const notoSans = Noto_Sans_SC({
@@ -21,29 +21,12 @@ const title = "Blum Agent｜百隆五金智能工作台";
 const description =
   "面向设计师、销售、安装工、生产、采购和消费者的百隆五金专业助手，提供官方资料优先、风险分级的产品与应用建议。";
 
-function safeOrigin(hostValue: string | null, protocolValue: string | null) {
-  const host =
-    hostValue && /^[a-z0-9.:[\]-]+$/i.test(hostValue)
-      ? hostValue
-      : "localhost:3000";
-  const protocol =
-    protocolValue === "http" || protocolValue === "https"
-      ? protocolValue
-      : host.startsWith("localhost")
-        ? "http"
-        : "https";
-  return `${protocol}://${host}`;
-}
-
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const origin = safeOrigin(
-    requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"),
-    requestHeaders.get("x-forwarded-proto"),
-  );
-  const socialImage = `${origin}/og.png`;
+export function generateMetadata(): Metadata {
+  const metadataBase = publicSiteUrlFromEnvironment();
+  const socialImage = new URL("/og.png", metadataBase).href;
 
   return {
+    metadataBase,
     title,
     description,
     applicationName: "Blum Agent",

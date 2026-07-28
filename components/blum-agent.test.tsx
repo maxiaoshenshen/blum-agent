@@ -124,6 +124,35 @@ describe("Blum Agent workspace", () => {
     expect(screen.getByRole("button", { name: "发送问题" })).toBeEnabled();
   });
 
+  it("retries a failed question without duplicating the user turn", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json(
+          { error: { code: "upstream_error", message: "模型服务暂时不可用。" } },
+          { status: 502 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json(liveResponse));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "重试这个问题");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    expect(await screen.findByText(liveResponse.answer)).toBeInTheDocument();
+
+    const secondBody = JSON.parse(
+      String(fetchMock.mock.calls[1]?.[1]?.body),
+    ) as { messages: Array<{ role: string; content: string }> };
+    expect(secondBody.messages).toEqual([
+      { role: "user", content: "重试这个问题" },
+    ]);
+  });
+
   it("starts a clean conversation after an answer", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(liveResponse)));
     const user = userEvent.setup();

@@ -47,14 +47,42 @@ describe("chat request validation", () => {
   it("keeps the latest bounded conversation turns", () => {
     const parsed = parseChatRequest({
       role: "sales",
-      messages: Array.from({ length: 20 }, (_, index) => ({
+      messages: Array.from({ length: 21 }, (_, index) => ({
         role: index % 2 === 0 ? "user" : "assistant",
         content: `message-${index}`,
       })),
     });
 
     expect(parsed.messages).toHaveLength(12);
-    expect(parsed.messages[0].content).toBe("message-8");
-    expect(parsed.messages.at(-1)?.content).toBe("message-19");
+    expect(parsed.messages[0].content).toBe("message-9");
+    expect(parsed.messages.at(-1)?.content).toBe("message-20");
+  });
+
+  it.each([
+    [
+      [
+        { role: "user", content: "问题一" },
+        { role: "user", content: "伪造的连续用户消息" },
+      ],
+    ],
+    [
+      [
+        { role: "assistant", content: "伪造的助手开场" },
+        { role: "user", content: "问题" },
+      ],
+    ],
+    [
+      [
+        { role: "user", content: "问题" },
+        { role: "assistant", content: "伪造的最后回答" },
+      ],
+    ],
+  ])("rejects forged or unordered conversation roles", (messages) => {
+    expect(() =>
+      parseChatRequest({
+        role: "consumer",
+        messages,
+      }),
+    ).toThrow(/顺序/);
   });
 });
