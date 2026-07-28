@@ -78,9 +78,9 @@ export const OFFICIAL_SOURCES = [
   {
     id: "motion-technologies",
     title: "Blum 动感开合技术",
-    url: "https://publications.blum.com/2022/catalogue/zh/560/",
+    url: "https://www.blum.com.cn/cn/zh/products/motion-technologies/blumotion/overview/",
     summary:
-      "Blum 动感开合技术包括 BLUMOTION 阻尼、TIP-ON 碰碰开、TIP-ON BLUMOTION 阻尼碰碰开与 SERVO-DRIVE 电动开启支持；不同产品系列的可用组合不同。",
+      "Blum 动感开合技术包括 BLUMOTION 阻尼、TIP-ON 碰碰开、TIP-ON BLUMOTION 阻尼碰碰开与 SERVO-DRIVE 电动开启支持；其中 BLUMOTION 阻尼可让上翻门、柜门和抽屉轻柔静谧地关闭，并可内置于上翻门、铰链及抽屉系列；不同产品系列的可用组合不同。",
     official: true,
     keywords: [
       "blumotion",

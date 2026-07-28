@@ -7,7 +7,7 @@ import type {
   RoleId,
 } from "@/src/domain/types";
 import { buildSystemPrompt } from "./prompt";
-import { isGroundedModelAnswer } from "./grounding";
+import { groundModelAnswer } from "./grounding";
 import {
   requestChatCompletion,
   type ProviderConfig,
@@ -202,7 +202,11 @@ export async function answerChat(
     image: request.image,
   });
 
-  if (!isGroundedModelAnswer(answer, matches.map(({ source }) => source))) {
+  const groundedAnswer = groundModelAnswer(
+    answer,
+    matches.map(({ source }) => source),
+  );
+  if (!groundedAnswer) {
     return {
       answer: groundedFallbackAnswer(sources, request.role),
       confidence,
@@ -213,7 +217,7 @@ export async function answerChat(
   }
 
   return {
-    answer,
+    answer: groundedAnswer,
     confidence,
     followUps: followUpsFor(request.role, risk),
     mode: "live",

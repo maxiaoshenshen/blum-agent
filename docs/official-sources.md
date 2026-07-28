@@ -11,6 +11,7 @@ Blum Agent 只将 `blum.com`、`publications.blum.com` 及其官方内容分发�
 - [铰链系列](https://www.blum.com/connects/zh/app/hinge-systems)
 - [抽屉系列](https://www.blum.com/connects/zh/app/box-systems)
 - [导轨系列](https://www.blum.com/connects/zh/app/runner-systems)
+- [BLUMOTION 阻尼](https://www.blum.com.cn/cn/zh/products/motion-technologies/blumotion/overview/)
 - [REVEGO 口袋门](https://www.blum.com/connects/zh/app/pocket-systems)
 - [中文产品目录](https://publications.blum.com/2022/catalogue/zh/toc/)
 - [Blum 中国订购手册](https://publications.blum.com/2025/miscellaneous/bcn/ordering/zh/)

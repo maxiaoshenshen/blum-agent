@@ -61,6 +61,25 @@ describe("Blum chat orchestration", () => {
     expect(response.answer).not.toContain("ADUBO");
   });
 
+  it("returns a live answer after removing unsupported model sentences", async () => {
+    const response = await answerChat(request, {
+      providerConfig: {
+        apiKey: "test-secret",
+        baseUrl: "https://provider.example",
+        model: "claude-opus-5",
+      },
+      requestCompletion: vi.fn(
+        async () =>
+          "MERIVOBOX 是 Blum 金属抽屉系统中的产品系列。它还能自动识别餐具。",
+      ),
+    });
+
+    expect(response.mode).toBe("live");
+    expect(response.answer).toContain("MERIVOBOX");
+    expect(response.answer).toContain("已省略");
+    expect(response.answer).not.toContain("自动识别餐具");
+  });
+
   it("marks precise purchasing decisions for review", async () => {
     const requestCompletion = vi.fn(async () => "不应调用的自由生成回答。");
     const response = await answerChat(
