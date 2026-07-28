@@ -28,6 +28,9 @@ interface ChatCompletionResponse {
   }>;
 }
 
+const MAX_OUTPUT_CHARACTERS = 12_000;
+const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504]);
+
 export class ProviderError extends Error {
   readonly code: string;
   readonly status: number;
@@ -100,48 +103,81 @@ export async function requestChatCompletion(
   );
 
   try {
-    const response = await fetchImpl(
-      `${request.config.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${request.config.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: request.config.model,
-          temperature: 0.2,
-          messages: toProviderMessages(
-            request.systemPrompt,
-            request.messages,
-            request.image,
-          ),
-        }),
-        signal: controller.signal,
+    const input = `${request.config.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
+    const init: RequestInit = {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.config.apiKey}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        model: request.config.model,
+        temperature: 0.2,
+        max_tokens: 1800,
+        messages: toProviderMessages(
+          request.systemPrompt,
+          request.messages,
+          request.image,
+        ),
+      }),
+      signal: controller.signal,
+    };
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let response: Response;
+      try {
+        response = await fetchImpl(input, init);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw error;
+        }
+        if (attempt === 0) continue;
+        throw error;
+      }
+
+      if (!response.ok) {
+        if (attempt === 0 && RETRYABLE_STATUSES.has(response.status)) continue;
+        throw mapStatus(response.status);
+      }
+
+      let body: ChatCompletionResponse;
+      try {
+        body = (await response.json()) as ChatCompletionResponse;
+      } catch {
+        throw new ProviderError(
+          "invalid_response",
+          "模型返回了无法识别的结果，请重新提问。",
+          502,
+        );
+      }
+      const content = body.choices?.[0]?.message?.content;
+      if (typeof content !== "string") {
+        throw new ProviderError(
+          "invalid_response",
+          "模型返回了无法识别的结果，请重新提问。",
+          502,
+        );
+      }
+
+      const sanitized = sanitizeModelText(content);
+      if (!sanitized) {
+        throw new ProviderError(
+          "empty_response",
+          "模型没有生成可显示的答案，请重新提问。",
+          502,
+        );
+      }
+      if (sanitized.length > MAX_OUTPUT_CHARACTERS) {
+        return `${sanitized.slice(0, MAX_OUTPUT_CHARACTERS).trimEnd()}\n\n（回答过长，已截断）`;
+      }
+      return sanitized;
+    }
+
+    throw new ProviderError(
+      "upstream_error",
+      "模型服务暂时不可用，请稍后重试。",
+      502,
     );
-
-    if (!response.ok) throw mapStatus(response.status);
-
-    const body = (await response.json()) as ChatCompletionResponse;
-    const content = body.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
-      throw new ProviderError(
-        "invalid_response",
-        "模型返回了无法识别的结果，请重新提问。",
-        502,
-      );
-    }
-
-    const sanitized = sanitizeModelText(content);
-    if (!sanitized) {
-      throw new ProviderError(
-        "empty_response",
-        "模型没有生成可显示的答案，请重新提问。",
-        502,
-      );
-    }
-    return sanitized;
   } catch (error) {
     if (error instanceof ProviderError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") {

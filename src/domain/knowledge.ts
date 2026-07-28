@@ -131,6 +131,7 @@ export const OFFICIAL_SOURCES = [
       "调节",
       "拆卸",
       "排障",
+      "排查",
       "故障",
       "异响",
       "视频",

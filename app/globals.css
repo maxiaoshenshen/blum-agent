@@ -573,7 +573,8 @@ label:focus-within {
   white-space: pre-wrap;
 }
 
-.demo-note {
+.demo-note,
+.guarded-note {
   padding: 12px 14px;
   margin: 22px 0 0;
   border-left: 3px solid var(--warning);
@@ -581,6 +582,12 @@ label:focus-within {
   color: #6b480e;
   font-size: 11px;
   line-height: 1.6;
+}
+
+.guarded-note {
+  border-left-color: var(--signal);
+  background: var(--signal-wash);
+  color: #79300f;
 }
 
 .source-section,

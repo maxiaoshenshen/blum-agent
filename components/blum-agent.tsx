@@ -59,7 +59,7 @@ interface TimelineMessage {
   content: string;
   confidence?: ConfidenceLevel;
   followUps?: string[];
-  mode?: "live" | "demo";
+  mode?: "live" | "demo" | "guarded";
   sources?: SourceReference[];
 }
 
@@ -343,6 +343,11 @@ export function BlumAgent() {
                       {message.mode === "demo" ? (
                         <p className="demo-note">
                           当前未连接模型服务，以上为官方资料导航回答。
+                        </p>
+                      ) : null}
+                      {message.mode === "guarded" ? (
+                        <p className="guarded-note">
+                          已进入安全复核模式：只展示官方资料明确支持的内容，未展示无法验证的模型扩展。
                         </p>
                       ) : null}
                       {message.sources?.length ? (

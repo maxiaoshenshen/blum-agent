@@ -49,6 +49,15 @@ describe("official knowledge retrieval", () => {
     expect(ids).toContain("easy-assembly");
   });
 
+  it("adds installation guidance for现场排查 questions", () => {
+    const ids = retrieveKnowledge("MERIVOBOX 抽屉摩擦，现场怎么排查？").map(
+      ({ source }) => source.id,
+    );
+
+    expect(ids[0]).toBe("box-systems");
+    expect(ids).toContain("easy-assembly");
+  });
+
   it.each([
     ["MINIPRESS top 配 EASYSTICK 怎样从 BXF 加工？", "processing-devices"],
     ["SPACE TOWER 高柜怎么规划？", "cabinet-applications"],

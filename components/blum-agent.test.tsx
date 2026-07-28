@@ -114,4 +114,29 @@ describe("Blum Agent workspace", () => {
     });
     expect(screen.getByRole("button", { name: "发送问题" })).toBeEnabled();
   });
+
+  it("explains when a precise question uses the guarded review path", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ...liveResponse,
+          mode: "guarded",
+          confidence: "needs-review",
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(
+      screen.getByLabelText("向 Blum Agent 提问"),
+      "给我精确开孔尺寸",
+    );
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+
+    expect(
+      await screen.findByText(/已进入安全复核模式/),
+    ).toBeInTheDocument();
+  });
 });
