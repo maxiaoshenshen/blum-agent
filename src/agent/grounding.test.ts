@@ -127,4 +127,32 @@ describe("deterministic model grounding gate", () => {
 
     expect(grounded).toBeUndefined();
   });
+
+  it("rejects an empty model answer", () => {
+    expect(isGroundedModelAnswer("", [blumotionSource])).toBe(false);
+    expect(groundModelAnswer("", [blumotionSource])).toBeUndefined();
+  });
+
+  it("rejects an answer made only of punctuation", () => {
+    expect(isGroundedModelAnswer("……！！？？", [blumotionSource])).toBe(false);
+  });
+
+  it("accepts an official source URL as a directly grounded reference", () => {
+    expect(isGroundedModelAnswer(blumotionSource.url, [blumotionSource])).toBe(true);
+  });
+
+  it("handles a long answer without losing repeated grounded claims", () => {
+    const longAnswer = `${blumotionSource.summary}。`.repeat(100);
+    expect(longAnswer.length).toBeGreaterThan(1_000);
+    expect(isGroundedModelAnswer(longAnswer, [blumotionSource])).toBe(true);
+  });
+
+  it("normalizes Chinese punctuation and emoji before grounding", () => {
+    expect(
+      isGroundedModelAnswer(
+        "✨ BLUMOTION 是 Blum 自研的油压阻尼闭合技术，通过内置于产品内部的油压缓冲器实现轻柔、无冲击的关闭效果！",
+        [blumotionSource],
+      ),
+    ).toBe(true);
+  });
 });

@@ -150,8 +150,11 @@ export function parseChatRequest(value: unknown): ParsedChatRequest {
     throw new ValidationError("invalid_request", "请求格式无效。");
   }
 
-  const role = Reflect.get(value, "role");
-  if (typeof role !== "string" || !supportedRoleIds.has(role as RoleId)) {
+  const suppliedRole = Reflect.get(value, "role");
+  const role = typeof suppliedRole === "string" && suppliedRole.trim()
+    ? suppliedRole
+    : "consumer";
+  if (!supportedRoleIds.has(role as RoleId)) {
     throw new ValidationError("invalid_role", "请选择有效的用户角色。");
   }
 

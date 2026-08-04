@@ -77,8 +77,7 @@ const englishRoleLabels: Record<RoleId, string> = {
 
 const REQUEST_TIMEOUT_MS = 60_000;
 const RECONNECT_DELAY_MS = 3_000;
-const TIMEOUT_MESSAGE = "这个问题比较复杂，模型正在深入分析，请稍后重试或简化问题";
-const IMAGE_READ_ERROR_MESSAGE = "图片无法识别，请尝试重新上传或描述问题文字";
+const IMAGE_READ_ERROR_MESSAGE = "无法读取这张图片，请尝试重新上传或换个格式";
 const IMAGE_TOO_SMALL_MESSAGE = "图片分辨率过低，请上传更清晰的现场照片。";
 const CONVERSATION_STORAGE_KEY = "blum-agent-conversations-v1";
 const MAX_SAVED_CONVERSATIONS = 5;
@@ -90,11 +89,7 @@ const LONG_WAIT_DELAY_MS = 10_000;
 
 type RequestStage = "retrieving" | "analyzing" | "composing";
 
-const requestStageLabels: Record<RequestStage, string> = {
-  retrieving: "正在检索 Blum 资料",
-  analyzing: "正在分析问题",
-  composing: "正在组织答案",
-};
+const LONG_DRAFT_CONFIRMATION_LENGTH = 80;
 
 interface Attachment {
   dataUrl: string;
@@ -123,6 +118,56 @@ interface FeedbackState {
   rating: "helpful" | "inaccurate";
   comment: string;
   status: "editing" | "submitting" | "submitted" | "error";
+}
+
+class RequestError extends Error {
+  constructor(
+    readonly code?: string,
+    readonly status?: number,
+    readonly safeMessage?: string,
+  ) {
+    super(safeMessage ?? code);
+  }
+}
+
+function messageForRequestError(error: unknown, copy: ReturnType<typeof getMessages>): string {
+  if (error instanceof RequestError) {
+    if (error.status === 429 || error.code === "rate_limited") return copy.rateLimitedError;
+    if (error.status === 504 || error.code === "timeout") return copy.timeoutError;
+    if (error.status === 503 || error.code === "no_config" || error.code === "service_unavailable" || error.code === "upstream_error") return copy.serviceUnavailableError;
+    if (error.status && error.status >= 400 && error.status < 500 && error.safeMessage) return error.safeMessage;
+  }
+  if (error instanceof TypeError || (error instanceof Error && /network|fetch failed|failed to fetch/i.test(error.message))) {
+    return copy.networkError;
+  }
+  return "暂时无法获得回答，请稍后重试。";
+}
+
+async function readApiError(response: Response): Promise<RequestError> {
+  const raw = await response.text();
+  let code: string | undefined;
+  let safeMessage: string | undefined;
+  try {
+    const payload: unknown = JSON.parse(raw);
+    if (isRecord(payload) && isRecord(payload.error)) {
+      if (typeof payload.error.code === "string") code = payload.error.code;
+      if (typeof payload.error.message === "string") safeMessage = payload.error.message;
+    }
+  } catch {
+    const match = raw.match(/data:\s*(\{[^\n]+\})/);
+    if (match) {
+      try {
+        const payload: unknown = JSON.parse(match[1]);
+        if (isRecord(payload)) {
+          if (typeof payload.code === "string") code = payload.code;
+          if (typeof payload.message === "string") safeMessage = payload.message;
+        }
+      } catch {
+        // A malformed response is handled as an unavailable request below.
+      }
+    }
+  }
+  return new RequestError(code, response.status, safeMessage);
 }
 
 function createId(): string {
@@ -362,6 +407,7 @@ export function BlumAgent() {
   const [showOlderHistory, setShowOlderHistory] = useState(false);
   const [hasRestoredConversation, setHasRestoredConversation] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
+  const [notice, setNotice] = useState("");
   const [locale, setLocale] = useState<AppLocale>("zh");
   const [isRolePanelCollapsed, setIsRolePanelCollapsed] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
@@ -388,6 +434,11 @@ export function BlumAgent() {
   );
   const copy = getMessages(locale);
   const selectedRoleLabel = locale === "en" ? englishRoleLabels[selectedRole.id] : selectedRole.label;
+
+  const announce = useCallback((message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice((current) => current === message ? "" : current), 3_500);
+  }, []);
 
   useEffect(() => {
     const container = conversationRef.current;
@@ -470,7 +521,7 @@ export function BlumAgent() {
 
       if (e.key === "Escape") {
         if (showHelp) { setShowHelp(false); return; }
-        if (draft || attachment) { setDraft(""); setAttachment(null); setError(""); inputRef.current?.focus(); }
+        if (draft || attachment) clearDraft();
         return;
       }
       if (
@@ -479,7 +530,7 @@ export function BlumAgent() {
         isInputFocused
       ) {
         e.preventDefault();
-        setDraft("");
+        clearDraft();
         return;
       }
       if (e.key === "?" && !isInputFocused) { setShowHelp(true); return; }
@@ -491,7 +542,11 @@ export function BlumAgent() {
         const keyNum = parseInt(e.key, 10);
         if (keyNum >= 1 && keyNum <= 6) {
           const role = ROLES[keyNum - 1];
-          if (role) { setRoleId(role.id); setError(""); }
+          if (role) {
+            setRoleId(role.id);
+            setError("");
+            announce(formatMessage(copy.roleChanged, { role: locale === "en" ? englishRoleLabels[role.id] : role.label }));
+          }
         }
       }
     }
@@ -503,6 +558,14 @@ export function BlumAgent() {
     setDraft(prompt);
     const promptLocale = detectLocaleFromText(prompt);
     if (promptLocale) setLocale(promptLocale);
+    setError("");
+    inputRef.current?.focus();
+  }
+
+  function clearDraft() {
+    if (draft.length >= LONG_DRAFT_CONFIRMATION_LENGTH && !window.confirm(copy.confirmClearDraft)) return;
+    setDraft("");
+    setAttachment(null);
     setError("");
     inputRef.current?.focus();
   }
@@ -566,6 +629,7 @@ export function BlumAgent() {
           setIsUploading(false);
           setAttachment({ dataUrl: reader.result as string, name: file.name });
           setError("");
+          announce(copy.imageAdded);
         })
         .catch((reason: unknown) => {
           setIsUploading(false);
@@ -655,7 +719,8 @@ export function BlumAgent() {
             body: JSON.stringify({ role: roleId, messages: apiMessages(nextMessages), image: attachment?.dataUrl }),
             signal: controller.signal,
           });
-          if (!response.ok || !response.body) throw new Error("Stream unavailable");
+          if (!response.ok) throw await readApiError(response);
+          if (!response.body) throw new Error("Stream unavailable");
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
@@ -693,7 +758,7 @@ export function BlumAgent() {
                 completed = true;
                 setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: typeof data.answer === "string" ? data.answer : "", confidence: asConfidence(data.confidence), followUps: asFollowUps(data.followUps), mode: "live", sources: asSourceReferences(data.sources) } : m));
               } else if (eventName === "error") {
-                throw new Error(String(data.message ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。"));
+                throw new RequestError(typeof data.code === "string" ? data.code : undefined);
               }
             }
           }
@@ -704,8 +769,12 @@ export function BlumAgent() {
           return;
         } catch (streamError) {
           if (requestVersion !== requestVersionRef.current) return;
-          if (timedOut) { restoreQuestion(TIMEOUT_MESSAGE); return; }
+          if (timedOut) { restoreQuestion(copy.timeoutError); return; }
           if (streamError instanceof DOMException && streamError.name === "AbortError") return;
+          if (streamError instanceof RequestError) {
+            restoreQuestion(messageForRequestError(streamError, copy), streamError.status === 503);
+            return;
+          }
 
           try {
             const fallbackResponse = await fetch("/api/chat", {
@@ -716,9 +785,11 @@ export function BlumAgent() {
             });
             const parsedBody: unknown = await fallbackResponse.json();
             const body = isRecord(parsedBody) ? parsedBody : {};
-            const bodyError = isRecord(body.error) && typeof body.error.message === "string" ? body.error.message : undefined;
+            const bodyCode = isRecord(body.error) && typeof body.error.code === "string" ? body.error.code : undefined;
+            const bodyErrorMessage = isRecord(body.error) && typeof body.error.message === "string" ? body.error.message : undefined;
             if (!fallbackResponse.ok || typeof body.answer !== "string") {
-              restoreQuestion(bodyError ?? "暂时无法获得回答，请稍后重试。", true);
+              const requestError = new RequestError(bodyCode, fallbackResponse.status, bodyErrorMessage);
+              restoreQuestion(messageForRequestError(requestError, copy), fallbackResponse.status === 503);
               return;
             }
             if (requestVersion !== requestVersionRef.current) return;
@@ -729,14 +800,14 @@ export function BlumAgent() {
             return;
           } catch (fallbackError) {
             if (requestVersion !== requestVersionRef.current) return;
-            if (timedOut) { restoreQuestion(TIMEOUT_MESSAGE); return; }
+            if (timedOut) { restoreQuestion(copy.timeoutError); return; }
             if (fallbackError instanceof DOMException && fallbackError.name === "AbortError") return;
             if (attempt === 0) {
               setConnectionState("reconnecting");
               await new Promise<void>((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
               continue;
             }
-            restoreQuestion("暂时无法连接服务，请检查网络后重试。", true);
+            restoreQuestion(messageForRequestError(fallbackError, copy), true);
             return;
           }
         }
@@ -754,6 +825,7 @@ export function BlumAgent() {
     }
   }
   function startNewConversation() {
+    if ((draft.trim() || attachment) && !window.confirm(copy.confirmNewConversation)) return;
     if (messages.length > 0) {
       writeStoredConversation({
         id: conversationIdRef.current,
@@ -778,6 +850,7 @@ export function BlumAgent() {
     setFeedbackByAnswerId({});
     setShowOlderHistory(false);
     setExportStatus("");
+    setNotice("");
     inputRef.current?.focus();
   }
 
@@ -793,7 +866,9 @@ export function BlumAgent() {
     if (!feedback || feedback.status === "submitting") return;
     setFeedbackByAnswerId((current) => ({
       ...current,
-      [answerId]: { ...feedback, status: "submitting" },
+      // A feedback click should feel immediate. If delivery fails, the catch
+      // branch below restores the editable form together with a retry hint.
+      [answerId]: { ...feedback, status: "submitted" },
     }));
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -837,7 +912,8 @@ export function BlumAgent() {
     ].join("\n");
     try {
       await navigator.clipboard?.writeText(exported);
-      setExportStatus("对话已复制到剪贴板");
+      setExportStatus(copy.conversationCopied);
+      announce(copy.conversationCopied);
     } catch {
       setExportStatus("复制失败，请检查浏览器剪贴板权限");
     }
@@ -852,8 +928,9 @@ export function BlumAgent() {
     <main className={`agent-shell${isKeyboardOpen ? " keyboard-open" : ""}`} data-locale={locale} id="workspace">
       {showHelp && <HelpOverlay onClose={closeHelp} />}
       <p aria-live="polite" className="sr-only" role="status">
-        {copiedSourceId ? "资料链接已复制到剪贴板" : ""}
+        {notice || (copiedSourceId ? "资料链接已复制到剪贴板" : "")}
       </p>
+      {notice ? <div className="action-notice" role="status">{notice}</div> : null}
       <h1 className="sr-only">{`${copy.appName} ${copy.workspaceName}`}</h1>
       <header className="topbar">
         <a className="brand" href="#workspace" aria-label="Blum Agent 首页">
@@ -943,6 +1020,7 @@ export function BlumAgent() {
                     onClick={() => {
                       setRoleId(role.id);
                       setError("");
+                      announce(formatMessage(copy.roleChanged, { role: locale === "en" ? englishRoleLabels[role.id] : role.label }));
                     }}
                     type="button"
                   >
@@ -1138,7 +1216,7 @@ export function BlumAgent() {
                             {feedback?.status === "submitted" ? (
                               <p className="feedback-success" role="status">
                                 <CheckCircle2 aria-hidden="true" size={15} />
-                                感谢反馈，我们会持续改进
+                                {copy.feedbackSubmitted}
                               </p>
                             ) : (
                               <>
@@ -1238,7 +1316,7 @@ export function BlumAgent() {
                     <span className="thinking-text">
                       {connectionState === "reconnecting"
                         ? `${copy.reconnecting}...`
-                        : requestStageLabels[requestStage]}
+                        : copy[requestStage]}
                     </span>
                     {hasLongWait ? <small className="thinking-estimate">预计还需片刻，正在继续处理。</small> : null}
                     <span className="thinking-dots" aria-hidden="true" />

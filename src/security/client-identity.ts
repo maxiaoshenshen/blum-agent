@@ -1,10 +1,15 @@
 /**
- * Cloudflare sets this header after removing any client-supplied value.  Do
- * not use X-Forwarded-For here: it is attacker-controlled unless the full
- * proxy chain is explicitly trusted and configured by the deployment.
+ * Prefer Cloudflare's sanitized client address. For deployments behind a
+ * conventional trusted reverse proxy, fall back to the left-most
+ * X-Forwarded-For value, which represents the original client address.
  */
 export function clientIdentity(request: Request): string {
-  const value = request.headers.get("cf-connecting-ip")?.trim();
+  const cloudflareAddress = request.headers.get("cf-connecting-ip")?.trim();
+  const forwardedAddress = request.headers
+    .get("x-forwarded-for")
+    ?.split(",", 1)[0]
+    ?.trim();
+  const value = cloudflareAddress || forwardedAddress;
 
   // Keep the limiter key bounded even when this module is exercised outside
   // Cloudflare (for example, in local tests or a misconfigured deployment).

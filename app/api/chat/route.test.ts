@@ -234,6 +234,108 @@ describe("POST /api/chat", () => {
     expect(forwardedOnly.status).toBe(400);
   });
 
+  it("uses the first x-forwarded-for address when Cloudflare identity is absent", async () => {
+    const clientIp = `198.51.100.${Math.floor(Math.random() * 200) + 1}`;
+    const otherIp = `203.0.113.${Math.floor(Math.random() * 200) + 1}`;
+    const request = (forwardedFor: string) => POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-forwarded-for": forwardedFor },
+        body: "{}",
+      }),
+    );
+
+    for (let index = 0; index < 30; index += 1) {
+      expect((await request(` ${clientIp}, ${otherIp} `)).status).toBe(400);
+    }
+    expect((await request(`${clientIp}, ${otherIp}`)).status).toBe(429);
+    expect((await request(`${otherIp}, ${clientIp}`)).status).toBe(400);
+  });
+
+  it("uses the bounded unknown identity when no proxy IP headers are supplied", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "missing_message" },
+    });
+  });
+
+  it("uses the consumer role when the optional role field is blank", async () => {
+    vi.stubEnv("PROVIDER_BASE_URL", "");
+    vi.stubEnv("PROVIDER_API_KEY", "");
+    vi.stubEnv("PROVIDER_MODEL", "");
+    const response = await post({
+      role: "",
+      messages: [{ role: "user", content: "BLUMOTION 是什么？" }],
+    });
+
+    expect(response.status).toBe(200);
+    expect((await response.json()) as { mode: string }).toMatchObject({ mode: "demo" });
+  });
+
+  it("returns the missing-message contract for an empty messages array", async () => {
+    const response = await post({ role: "consumer", messages: [] });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "missing_message", message: "请先输入一个关于 Blum 的问题。" },
+    });
+  });
+
+  it("rejects a base64 image whose decoded bytes do not match its declared format", async () => {
+    const response = await post({
+      role: "consumer",
+      messages: [{ role: "user", content: "帮我检查这张铰链图片" }],
+      image: "data:image/png;base64,aGVsbG8=",
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "unsupported_image", message: "图片内容与声明格式不匹配。" },
+    });
+  });
+
+  it("returns an official-material fallback when the provider returns 500", async () => {
+    vi.stubEnv("PROVIDER_BASE_URL", "https://provider.example");
+    vi.stubEnv("PROVIDER_API_KEY", "test-key");
+    vi.stubEnv("PROVIDER_MODEL", "claude-opus-5");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("server error", { status: 500 })));
+
+    const response = await post({
+      role: "consumer",
+      messages: [{ role: "user", content: "BLUMOTION 是什么？" }],
+    });
+    const body = await response.json() as { answer: string; mode: string };
+
+    expect(response.status).toBe(200);
+    expect(body.mode).toBe("demo");
+    expect(body.answer).toContain("模型服务暂时不可用");
+  });
+
+  it("returns an official-material fallback when the provider returns invalid JSON", async () => {
+    vi.stubEnv("PROVIDER_BASE_URL", "https://provider.example");
+    vi.stubEnv("PROVIDER_API_KEY", "test-key");
+    vi.stubEnv("PROVIDER_MODEL", "claude-opus-5");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not json", { status: 200 })));
+
+    const response = await post({
+      role: "consumer",
+      messages: [{ role: "user", content: "BLUMOTION 是什么？" }],
+    });
+    const body = await response.json() as { answer: string; mode: string };
+
+    expect(response.status).toBe(200);
+    expect(body.mode).toBe("demo");
+    expect(body.answer).toContain("模型服务暂时不可用");
+  });
+
   it("does not let a prototype-shaped JSON payload alter request parsing", async () => {
     const response = await POST(
       new Request("http://localhost/api/chat", {

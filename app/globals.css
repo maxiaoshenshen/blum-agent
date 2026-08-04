@@ -1682,6 +1682,31 @@ label:focus-within {
   display: none;
 }
 
+/* Brief, non-blocking confirmation after a completed user action. */
+.action-notice {
+  position: fixed;
+  z-index: 110;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 86, 31, 0.35);
+  border-radius: 8px;
+  background: var(--ink);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.45;
+  animation: action-notice-in 180ms ease-out both;
+}
+
+@keyframes action-notice-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
 /* ============================================
    Help Overlay Styles (Task 2)
    ============================================ */

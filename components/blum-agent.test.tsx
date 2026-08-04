@@ -153,7 +153,7 @@ describe("Blum Agent workspace", () => {
     await user.type(screen.getByLabelText("哪里不准确？"), "说明很实用");
     await user.click(screen.getByRole("button", { name: "提交反馈" }));
 
-    expect(await screen.findByText("感谢反馈，我们会持续改进")).toBeInTheDocument();
+    expect(await screen.findByText("感谢您的反馈！")).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/feedback"))).toBe(true);
   });
 
@@ -220,7 +220,7 @@ describe("Blum Agent workspace", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "图片无法识别，请尝试重新上传或描述问题文字",
+      "无法读取这张图片，请尝试重新上传或换个格式",
     );
     if (previousDecode) {
       Object.defineProperty(HTMLImageElement.prototype, "decode", previousDecode);
@@ -241,7 +241,7 @@ describe("Blum Agent workspace", () => {
     fireEvent.error(preview);
 
     expect(screen.queryByRole("img", { name: "待发送图片：broken-preview.png" })).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("图片无法识别，请尝试重新上传或描述问题文字");
+    expect(screen.getByRole("alert")).toHaveTextContent("无法读取这张图片，请尝试重新上传或换个格式");
   });
 
   it("shows the retrieval stage while a response is being prepared", async () => {
@@ -252,7 +252,7 @@ describe("Blum Agent workspace", () => {
     await user.type(screen.getByLabelText("向 Blum Agent 提问"), "帮我选一套抽屉五金");
     await user.click(screen.getByRole("button", { name: "发送问题" }));
 
-    expect(await screen.findByText("正在检索 Blum 资料")).toBeInTheDocument();
+    expect(await screen.findByText("正在检索 Blum 官方资料...")).toBeInTheDocument();
   });
 
   it("handles an invalid fallback payload without crashing the conversation", async () => {
@@ -282,7 +282,7 @@ describe("Blum Agent workspace", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "模型服务暂时不可用。",
+        "Blum Agent 正在维护中，请稍后再试",
       );
     });
     expect(screen.getByRole("button", { name: "发送问题" })).toBeEnabled();
@@ -434,5 +434,90 @@ describe("Blum Agent workspace", () => {
     expect(
       await screen.findByText(/已进入安全复核模式/),
     ).toBeInTheDocument();
+  });
+
+  it("automatically reconnects after a transient network disconnect", async () => {
+    let streamCalls = 0;
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/chat/stream")) {
+        streamCalls += 1;
+        return Promise.reject(new TypeError("network disconnected"));
+      }
+      if (streamCalls === 1) return Promise.reject(new TypeError("network disconnected"));
+      return Promise.resolve(Response.json(liveResponse));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "网络异常后能否恢复？");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+
+    expect(await screen.findByText("正在重新连接...")).toBeInTheDocument();
+    expect(await screen.findByText(liveResponse.answer, {}, { timeout: 4_000 })).toBeInTheDocument();
+    expect(streamCalls).toBe(2);
+  });
+
+  it("shows feedback confirmation optimistically and restores the form after a failed submission", async () => {
+    let rejectFeedback: (() => void) | undefined;
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/api/feedback")) {
+        return new Promise<Response>((_resolve, reject) => {
+          rejectFeedback = () => reject(new TypeError("network disconnected"));
+        });
+      }
+      return makeFetchMock("success")(input);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "这个回答可靠吗？");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await screen.findByText(liveResponse.answer);
+    await user.click(screen.getByRole("button", { name: "👍 有帮助" }));
+    await user.click(screen.getByRole("button", { name: "提交反馈" }));
+
+    expect(screen.getByText("感谢您的反馈！")).toBeInTheDocument();
+    rejectFeedback?.();
+    expect(await screen.findByRole("alert")).toHaveTextContent("反馈暂未提交，请稍后重试");
+    expect(screen.getByRole("button", { name: "提交反馈" })).toBeInTheDocument();
+  });
+
+  it("allows rapid role switching while a request is still pending", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "请给我方案");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await user.click(screen.getByRole("button", { name: "切换至设计师角色" }));
+    await user.click(screen.getByRole("button", { name: "切换至采购角色" }));
+
+    expect(screen.getByRole("button", { name: "切换至采购角色" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "切换至设计师角色" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps answer expansion state correct after repeated toggles", async () => {
+    const longAnswer = "官方安装说明。".repeat(100);
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      if (String(input).includes("/chat/stream")) return Promise.reject(new TypeError("stream unavailable"));
+      return Promise.resolve(Response.json({ ...liveResponse, answer: longAnswer }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "展示长回答");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    const toggle = await screen.findByRole("button", { name: "展开完整回答" });
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: "收起回答" }));
+    await user.click(screen.getByRole("button", { name: "展开完整回答" }));
+
+    expect(screen.getByRole("button", { name: "收起回答" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(longAnswer)).toBeInTheDocument();
   });
 });
