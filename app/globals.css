@@ -2224,3 +2224,102 @@ kbd + kbd {
     touch-action: pan-y;
   }
 }
+
+/* R31: Mobile UX enhancements -------------------------------------------- */
+
+/* Prevent pinch zoom on the main UI (users can still zoom text) */
+.agent-shell {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: contain;
+}
+
+/* Ensure minimum 44×44px touch targets on all interactive elements */
+.send-button,
+.attach-button,
+.new-chat-button,
+.language-button,
+.role-panel-toggle,
+.starter-grid button,
+.quick-question,
+.follow-ups button,
+.role-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Fix iOS input zoom: prevent font size inflation on focus */
+textarea,
+input[type="text"],
+input[type="search"] {
+  font-size: 16px;
+}
+
+/* iOS momentum scrolling for long lists */
+.role-list,
+.conversation-list,
+.message-list {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent iOS link highlight delay */
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Allow text selection in messages (for copy) */
+.answer-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Fix iOS Safari 100svh jump issue */
+@supports (height: 100dvh) {
+  .topbar {
+    height: env(safe-area-inset-top, 0px);
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  .composer-wrap {
+    padding-bottom: max(9px, env(safe-area-inset-bottom));
+  }
+}
+
+/* R32: Keyboard navigation improvements ---------------------------------- */
+
+/* Visible focus ring on mobile (larger for touch users) */
+@media (pointer: coarse) {
+  button:focus-visible,
+  textarea:focus-visible {
+    outline-width: 4px;
+    outline-offset: 4px;
+  }
+}
+
+/* Skip to content link — visible only on keyboard focus */
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* Escape key closes modals and panels */
+.message-context-menu,
+.role-panel {
+  /* transition handled in component */
+}
+
+/* Better scrollbar for conversation on desktop */
+.conversation-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.conversation-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.conversation-list::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 2px;
+}
