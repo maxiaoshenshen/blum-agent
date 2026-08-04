@@ -79,6 +79,17 @@ function sse(key: string, data: unknown): string {
   return `event: ${key}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+function providerUnavailableAnswer(sources: readonly {
+  title: string;
+  summary: string;
+}[]): string {
+  const confirmed = sources
+    .slice(0, 2)
+    .map((source) => `- ${source.title}：${source.summary}`)
+    .join("\n");
+  return `模型服务暂时不可用，以下仅提供当前可确认的 Blum 官方资料：\n\n${confirmed}\n\n如需精确参数，请打开下方官方资料并按当前市场复核。`;
+}
+
 function requestIdFor(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
   return supplied && /^[a-zA-Z0-9_-]{8,128}$/.test(supplied) ? supplied : createRequestId();
@@ -276,9 +287,19 @@ export async function POST(request: Request): Promise<Response> {
               responseTimeMs: Date.now() - startTime,
               providerStatus: providerError?.status,
             });
+            if (providerError) {
+              const fallbackAnswer = providerUnavailableAnswer(sources);
+              const confidence = risk === "precision" ? "needs-review" : "guided";
+              const followUps = risk === "precision"
+                ? ["补充完整产品编号与所在市场", "提供柜体、面板和应用场景参数", "用官方配置器或当前订购手册做最终复核"]
+                : ["提供产品型号和现场照片", "说明柜体应用和当前故障现象"];
+              send("chunk", { text: fallbackAnswer, accumulated: fallbackAnswer });
+              send("done", { answer: fallbackAnswer, confidence, followUps, sources });
+              return;
+            }
             send("error", {
-              code: providerError?.code ?? "internal_error",
-              message: providerError?.message ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。",
+              code: "internal_error",
+              message: "Blum Agent 暂时无法处理这个问题，请稍后重试。",
             });
           }
         } finally {

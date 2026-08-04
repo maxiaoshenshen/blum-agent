@@ -9,6 +9,7 @@ import type {
 import { buildSystemPrompt } from "./prompt";
 import { groundModelAnswer } from "./grounding";
 import {
+  ProviderError,
   requestChatCompletion,
   type ProviderConfig,
 } from "./provider";
@@ -100,6 +101,19 @@ function demoAnswer(source: OfficialSource, risk: RiskLevel, locale: AppLocale):
       : "";
 
   return `当前为演示模式，先根据 Blum 官方资料给你一个可靠入口：\n\n${source.summary}${reviewNotice}`;
+}
+
+function providerUnavailableAnswer(source: OfficialSource, risk: RiskLevel, locale: AppLocale): string {
+  if (locale === "en") {
+    const reviewNotice = risk === "precision"
+      ? "\n\nThis request needs exact selection or safety verification. Confirm complete parameters in the official configurator before ordering or machining."
+      : "";
+    return `The model service is temporarily unavailable. Here is the confirmed Blum official material available for this question:\n\n${source.summary}${reviewNotice}`;
+  }
+  const reviewNotice = risk === "precision"
+    ? "\n\n这个问题涉及精确选型或安全信息。请补充完整参数，并在下单或加工前用官方配置器复核。"
+    : "";
+  return `模型服务暂时不可用，以下仅提供当前可确认的 Blum 官方资料：\n\n${source.summary}${reviewNotice}`;
 }
 
 function guardedAnswer(
@@ -308,20 +322,32 @@ export async function answerChat(
 
   const completion = dependencies.requestCompletion ?? requestChatCompletion;
   dependencies.onModelRequest?.();
-  const answer = await completion({
-    config: dependencies.providerConfig,
-    systemPrompt: buildSystemPrompt({
-      role: getRole(request.role),
-      matches,
-      risk,
-      conversationHistory: request.messages,
-      knowledgeCoverage: answerQuality === "high" ? "direct" : "none",
-      locale,
-      answerQuality,
-    }),
-    messages: request.messages,
-    image: request.image,
-  });
+  let answer: string;
+  try {
+    answer = await completion({
+      config: dependencies.providerConfig,
+      systemPrompt: buildSystemPrompt({
+        role: getRole(request.role),
+        matches,
+        risk,
+        conversationHistory: request.messages,
+        knowledgeCoverage: answerQuality === "high" ? "direct" : "none",
+        locale,
+        answerQuality,
+      }),
+      messages: request.messages,
+      image: request.image,
+    });
+  } catch (error) {
+    if (!(error instanceof ProviderError)) throw error;
+    return {
+      answer: providerUnavailableAnswer(matches[0].source, risk, locale),
+      confidence,
+      followUps: followUpsFor(request.role, risk, locale),
+      mode: "demo",
+      sources,
+    };
+  }
 
   const groundedAnswer = groundModelAnswer(
     answer,

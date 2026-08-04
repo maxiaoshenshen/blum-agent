@@ -92,7 +92,7 @@ describe("POST /api/chat/stream", () => {
     expect(log.mock.calls.flat().join(" ")).not.toContain("MERIVOBOX 是什么产品？");
   });
 
-  it("returns an SSE error when the provider times out", async () => {
+  it("finishes with verified official material when the provider times out", async () => {
     vi.stubEnv("NODE_ENV", "development");
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     requestChatCompletion.mockRejectedValue(
@@ -104,8 +104,10 @@ describe("POST /api/chat/stream", () => {
 
     expect(response.status).toBe(200);
     expect(text).toContain("event: start\n");
-    expect(text).toContain("event: error\n");
-    expect(text).toContain('"code":"timeout"');
+    expect(text).toContain("event: chunk\n");
+    expect(text).toContain("模型服务暂时不可用");
+    expect(text).toContain("event: done\n");
+    expect(text).not.toContain("event: error\n");
     const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
     expect(events).toContainEqual(expect.objectContaining({
       level: "ERROR",

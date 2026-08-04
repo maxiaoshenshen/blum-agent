@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ParsedChatRequest } from "./schema";
 import { answerChat, providerConfigFromEnvironment } from "./chat";
+import { ProviderError } from "./provider";
 
 const merivoboxRequest: ParsedChatRequest = {
   role: "designer",
@@ -40,6 +41,24 @@ describe("Blum chat orchestration", () => {
     expect(response.answer).toContain("演示模式");
     expect(response.answer).toContain("MERIVOBOX");
     expect(response.sources[0].id).toBe("merivobox");
+  });
+
+  it("keeps a grounded official answer available when the configured provider is unavailable", async () => {
+    const response = await answerChat(merivoboxRequest, {
+      providerConfig: {
+        apiKey: "test-secret",
+        baseUrl: "https://provider.example",
+        model: "claude-opus-5",
+      },
+      requestCompletion: vi.fn(async () => {
+        throw new ProviderError("upstream_error", "模型服务暂时不可用，请稍后重试。", 502);
+      }),
+    });
+
+    expect(response.mode).toBe("demo");
+    expect(response.answer).toContain("模型服务暂时不可用");
+    expect(response.answer).toContain("MERIVOBOX");
+    expect(response.sources[0]).toMatchObject({ id: "merivobox", official: true });
   });
 
   it("replaces an ungrounded live draft with the official safe answer", async () => {
