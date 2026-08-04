@@ -44,6 +44,18 @@ describe("chat request validation", () => {
     ).toThrow(/JPG、PNG 或 WebP/);
   });
 
+  it("rejects an image whose decoded payload exceeds 5 MB", () => {
+    const bytesOverFiveMb = 5 * 1024 * 1024 + 1;
+    const base64Length = Math.ceil(bytesOverFiveMb / 3) * 4;
+
+    expect(() =>
+      parseChatRequest({
+        ...validRequest,
+        image: `data:image/webp;base64,${"A".repeat(base64Length)}`,
+      }),
+    ).toThrow(/5 MB/);
+  });
+
   it("keeps the latest bounded conversation turns", () => {
     const parsed = parseChatRequest({
       role: "sales",

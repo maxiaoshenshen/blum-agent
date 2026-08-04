@@ -220,7 +220,10 @@ describe("Blum Agent workspace", () => {
 
   it("retries a failed question without duplicating the user turn", async () => {
     let fallbackCalls = 0;
-    const fetchMock = vi.fn((input: string | URL | Request, _init?: RequestInit) => {
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      // Keep the request init in the mock signature so assertions can inspect
+      // the fallback request payload below.
+      void init;
       const url = String(input);
       if (url.includes("/chat/stream")) {
         return Promise.reject(new TypeError("Response body is null"));
@@ -280,6 +283,63 @@ describe("Blum Agent workspace", () => {
       "maxlength",
       "4000",
     );
+  });
+
+  it("does not submit an empty message", async () => {
+    const fetchMock = makeFetchMock("success");
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not submit a whitespace-only message", async () => {
+    const fetchMock = makeFetchMock("success");
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "   \n  ");
+    await user.keyboard("{Enter}");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a friendly error instead of submitting a message over 4000 characters", () => {
+    const fetchMock = makeFetchMock("success");
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BlumAgent />);
+
+    fireEvent.change(screen.getByLabelText("向 Blum Agent 提问"), {
+      target: { value: "问".repeat(4_001) },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("单条问题不能超过 4000 个字符");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores rapid repeat submissions while the latest request is in progress", async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      if (String(input).includes("/chat/stream")) {
+        return Promise.reject(new TypeError("Response body is null"));
+      }
+      return Promise.resolve(Response.json(liveResponse));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "连续发送的问题");
+    await user.dblClick(screen.getByRole("button", { name: "发送问题" }));
+
+    expect(await screen.findByText(liveResponse.answer)).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/chat/stream"))).toHaveLength(1);
+    expect(screen.getAllByText("连续发送的问题")).toHaveLength(1);
   });
 
   it("renders newlines from pasted or set content", async () => {

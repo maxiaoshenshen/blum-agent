@@ -17,7 +17,7 @@ export interface ParsedChatRequest {
 const MAX_MESSAGE_LENGTH = 4_000;
 const MAX_TOTAL_LENGTH = 12_000;
 const MAX_HISTORY_MESSAGES = 12;
-const MAX_IMAGE_DATA_URL_LENGTH = 7_000_000;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const supportedRoleIds = new Set(ROLES.map((role) => role.id));
 const supportedImagePattern =
   /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i;
@@ -104,7 +104,14 @@ function parseImage(value: unknown): string | undefined {
       "图片仅支持 JPG、PNG 或 WebP 格式。",
     );
   }
-  if (value.length > MAX_IMAGE_DATA_URL_LENGTH) {
+  const base64Payload = value.slice(value.indexOf(",") + 1).replace(/\s/g, "");
+  const paddingLength = base64Payload.endsWith("==")
+    ? 2
+    : base64Payload.endsWith("=")
+      ? 1
+      : 0;
+  const decodedBytes = Math.floor((base64Payload.length * 3) / 4) - paddingLength;
+  if (decodedBytes > MAX_IMAGE_BYTES) {
     throw new ValidationError("image_too_large", "图片不能超过 5 MB。");
   }
   return value.replace(/\s/g, "");

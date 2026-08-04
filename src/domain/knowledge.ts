@@ -1160,7 +1160,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "quality-certification",
     title: "Blum 产品质量与安全认证",
-    url: "https://www.blum.com/cn/zh/about-blum/quality/",
+    url: "https://www.blum.com/us/en/company/quality-innovation/overview/",
     summary:
       "Blum 产品质量管理体系通过 ISO 9001:2015 认证，覆盖从产品设计、原材料采购、生产制造到售后服务的全流程质量管理。耐用性测试方面：铰链产品需通过 LGA 测试（模拟日常使用开合 20 万次，检测结构完整性和功能保持率）和 Blue/Green 防腐测试（24 小时盐雾测试，等效于海边环境使用 5 年）。抽屉导轨需通过满载循环测试（负重 30kg 或 70kg，开合 10 万次，检测滑轨磨损和阻尼衰减）。AVENTOS 上翻门需通过 5 万次开合循环测试（含 BLUMOTION 阻尼状态）。安全标准方面：Blum 产品符合欧盟 EN 标准（EN 15570 铰链、EN 15338 抽屉）、美国 ANSI/BHMA 标准和中国 GB/T 标准（GB/T 3325 家具五金件）。BLUMOTION 阻尼系统还通过 REACH 和 RoHS 环保认证，确保不含铅、汞、镉等有害物质。所有认证文件可通过 Blum 中国官网或授权经销商获取。",
     official: true,
@@ -1185,7 +1185,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "environmental-cert",
     title: "Blum 环保合规与可持续认证",
-    url: "https://www.blum.com/cn/zh/about-blum/quality/",
+    url: "https://www.blum.com/us/en/company/sustainability/environmental-policy/",
     summary:
       "Blum 环保管理体系通过 ISO 14001:2015 认证，致力于在产品全生命周期中减少环境影响。材料合规方面：BLUMOTION 阻尼器中的硅油材料通过 REACH 法规（欧盟化学品注册、评估、授权和限制）认证，不含 SVHC（高关注物质）清单中的物质。Blum 金属产品（铰链、导轨、抽屉侧板）材质为优质冷轧钢，镀锌和电泳处理不含六价铬（Cr6+），符合 RoHS 指令（限制在电子电气设备中使用有害物质）。包装方面：Blum 中国市场的产品包装纸箱采用 100% 再生纸板，外包装印刷使用大豆油墨，减少挥发性有机化合物（VOC）排放。产品回收方面：Blum 在欧洲设有五金件回收计划，将使用后的金属件通过分拣、熔炼再利用（回收率目标 95% 以上）。BLUMOTION 阻尼单元由于含有硅油，需作为特殊废弃物处理，不可混入普通生活垃圾。",
     official: true,
@@ -1864,6 +1864,38 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
     summary: "退换和质保以购买渠道、地区条款、产品状态和安装证据为准。发现异常时保留完整产品号、批次、发票/订单、故障照片视频、安装环境及未改动状态；先向销售渠道登记，再按其流程送检或处理。定制、拆封、已安装或混装件可能影响可退条件，不能先自行拆修再主张原厂责任。",
     official: true,
     keywords: ["百隆质保", "百隆退货", "五金换货", "保修流程", "安装后能退吗", "售后需要什么", "warranty", "return policy"],
+  },
+  {
+    id: "tip-on-doors-three-step-calibration",
+    title: "TIP-ON for doors 碰碰开三步调试",
+    url: "https://www.blum.com/cn/zh/products/motion-technologies/tip-on/overview/",
+    summary: "调试 TIP-ON for doors 时按 3 步进行：①先把门板用铰链调到关闭位置平整、门缝均匀；②确认磁吸件与触发器正对且已固定，按具体型号说明设定前后位置；③从门板前缘、中部各按压至少 5 次，检查每次均能弹出并能重新吸合。若按压不弹，先查门缝、磁吸对位和门板翘曲；若误弹，先恢复正确间隙后再核对触发器型号，不能靠强行加大弹簧力解决。",
+    official: true,
+    keywords: ["TIP-ON怎么调", "碰碰开怎么调", "碰碰门调试", "按压门不弹", "一碰就开", "磁吸对不准", "peng peng kai", "pengpengkai", "tipon calibration", "push to open setup", "百龙碰碰开"],
+  },
+  {
+    id: "easy-assembly-product-number-workflow",
+    title: "EASY ASSEMBLY：按产品号找到正确安装资料",
+    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    summary: "使用 EASY ASSEMBLY 前准备 1 个完整产品号和 1 张现场照片；按 4 步操作：①搜索完整产品号而非只搜系列名；②确认页面显示的左右件、标称长度/版本与实物一致；③下载钻孔图或查看安装动画；④按图复核柜体、前板和孔位后再加工。找不到产品号时，保留包装标签、本体印字和 2 个安装尺寸提交给授权渠道，不要依据外观套用相近型号图纸。",
+    official: true,
+    keywords: ["EASY ASSEMBLY怎么用", "百隆安装视频", "安装图纸下载", "料号找安装图", "产品号找动画", "eazy assembly", "easyasemblly", "easiy assembly", "bai long anzhuang", "安装尺寸图"],
+  },
+  {
+    id: "production-first-article-hardware-validation",
+    title: "生产：五金首件确认与批量放行",
+    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    summary: "量产前必须完成至少 1 套首件：按完整产品号核对左右件、长度和配件包；按官方钻孔图加工并装配；空载连续开合 10 次，再按目标使用状态加载复查门缝、全行程和干涉。首件合格后才冻结 CNC 程序、钻孔模板和 BOM；若现场靠垫片或强力才能运行，应回到产品号、柜体尺寸和孔位排查，不能直接批量生产。",
+    official: true,
+    keywords: ["百隆首件", "五金首件确认", "五金量产", "CNC钻孔图", "批量生产五金", "抽屉首件测试", "shoujian", "bai long shoujian", "first article inspection", "hardware production validation"],
+  },
+  {
+    id: "service-fault-evidence-checklist",
+    title: "售后：五金故障的 5 项取证清单",
+    url: "https://www.blum.com/cn/zh/contact/",
+    summary: "提交五金故障前收集 5 项信息：①完整产品号与左右件标识；②包装/采购凭证；③故障开关过程视频；④柜体、门板或抽屉的正面及侧面照片；⑤已测得的至少 2 个关键安装尺寸。先停止强拉、敲击或拆开阻尼器，避免扩大损坏并保留原始状态。资料齐全后由购买渠道或 Blum 官方联系入口判断是安装偏差、缺件还是需更换部件。",
+    official: true,
+    keywords: ["百隆售后怎么报", "五金坏了怎么办", "故障视频", "百隆维修", "铰链坏了", "抽屉导轨坏了", "bai long shouhou", "baolong weixiu", "service claim", "fault evidence"],
   },
 ] as const satisfies readonly OfficialSource[];
 

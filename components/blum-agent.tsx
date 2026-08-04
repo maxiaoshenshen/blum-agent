@@ -9,7 +9,7 @@ import {
   type FormEvent,
 } from "react";
 import { ROLES } from "@/src/domain/roles";
-import type { ChatAnswer, SourceReference } from "@/src/agent/chat";
+import type { SourceReference } from "@/src/agent/chat";
 import type { ChatMessage } from "@/src/agent/schema";
 import type { ConfidenceLevel, RoleId } from "@/src/domain/types";
 import {
@@ -65,6 +65,7 @@ const CONVERSATION_STORAGE_KEY = "blum-agent-conversations-v1";
 const MAX_SAVED_CONVERSATIONS = 5;
 const MAX_VISIBLE_MESSAGES = 20;
 const MAX_RESTORED_MESSAGES = 200;
+const MAX_MESSAGE_LENGTH = 4_000;
 
 interface Attachment {
   dataUrl: string;
@@ -287,16 +288,21 @@ export function BlumAgent() {
   useEffect(() => {
     const container = conversationRef.current;
     if (container) container.scrollTop = container.scrollHeight;
-  }, [messages, isLoading, isStreamingRef.current]);
+  }, [messages, isLoading]);
 
   useEffect(() => {
-    const latest = readStoredConversations()[0];
-    if (latest) {
-      conversationIdRef.current = latest.id;
-      setRoleId(latest.roleId);
-      setMessages(latest.messages);
-    }
-    setHasRestoredConversation(true);
+    // Defer restoration until after the initial render. This preserves hydration
+    // consistency and avoids a synchronous state update from an effect body.
+    const timer = window.setTimeout(() => {
+      const latest = readStoredConversations()[0];
+      if (latest) {
+        conversationIdRef.current = latest.id;
+        setRoleId(latest.roleId);
+        setMessages(latest.messages);
+      }
+      setHasRestoredConversation(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -308,6 +314,21 @@ export function BlumAgent() {
       updatedAt: Date.now(),
     });
   }, [hasRestoredConversation, messages, roleId]);
+
+  useEffect(() => {
+    const cancelActiveRequest = () => {
+      requestVersionRef.current += 1;
+      activeRequestRef.current?.abort();
+      activeRequestRef.current = null;
+      isStreamingRef.current = false;
+    };
+
+    window.addEventListener("beforeunload", cancelActiveRequest);
+    return () => {
+      window.removeEventListener("beforeunload", cancelActiveRequest);
+      cancelActiveRequest();
+    };
+  }, []);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -420,7 +441,11 @@ export function BlumAgent() {
   async function submitQuestion(event?: FormEvent) {
     event?.preventDefault();
     const question = draft.trim();
-    if (!question || isLoading) return;
+    if (!question || isLoading || activeRequestRef.current) return;
+    if (question.length > MAX_MESSAGE_LENGTH) {
+      setError(`单条问题不能超过 ${MAX_MESSAGE_LENGTH} 个字符。`);
+      return;
+    }
 
     const userMessage: TimelineMessage = {
       id: createId(),
@@ -438,7 +463,6 @@ export function BlumAgent() {
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
     const controller = new AbortController();
-    activeRequestRef.current?.abort();
     activeRequestRef.current = controller;
 
     const streamingMsgId = createId();
@@ -457,6 +481,7 @@ export function BlumAgent() {
     }, REQUEST_TIMEOUT_MS);
 
     const restoreQuestion = (message: string, reconnecting = false) => {
+      if (requestVersion !== requestVersionRef.current) return;
       setMessages((current) =>
         current.filter((m) => m.id !== userMessage.id && m.id !== streamingMsgId),
       );
@@ -496,6 +521,10 @@ export function BlumAgent() {
               let data: Record<string, unknown>;
               try { data = JSON.parse(nextLine.slice(6).trim()) as Record<string, unknown>; } catch { continue; }
               const eventName = trimmed.slice(7).trim();
+              if (requestVersion !== requestVersionRef.current) {
+                await reader.cancel();
+                return;
+              }
               if (eventName === "start") {
                 setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, sources: data.sources as SourceReference[] } : m));
               } else if (eventName === "chunk") {
@@ -509,6 +538,7 @@ export function BlumAgent() {
             }
           }
           if (!completed) throw new Error("Stream ended without completion event");
+          if (requestVersion !== requestVersionRef.current) return;
           setAttachment(null);
           setConnectionState("online");
           return;
@@ -529,6 +559,7 @@ export function BlumAgent() {
               restoreQuestion(body.error?.message ?? "暂时无法获得回答，请稍后重试。", true);
               return;
             }
+            if (requestVersion !== requestVersionRef.current) return;
             setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: body.answer as string, confidence: body.confidence ?? "guided", followUps: body.followUps ?? [], mode: body.mode ?? "live", sources: body.sources ?? [] } : m));
             setAttachment(null);
             setConnectionState("online");
@@ -597,6 +628,8 @@ export function BlumAgent() {
       ...current,
       [answerId]: { ...feedback, status: "submitting" },
     }));
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch("/api/feedback", {
         method: "POST",
@@ -607,6 +640,7 @@ export function BlumAgent() {
           ...(feedback.comment.trim() ? { comment: feedback.comment.trim() } : {}),
           timestamp: Date.now(),
         }),
+        signal: controller.signal,
       });
       if (!response.ok) throw new Error("feedback request failed");
       setFeedbackByAnswerId((current) => ({
@@ -618,6 +652,8 @@ export function BlumAgent() {
         ...current,
         [answerId]: { ...feedback, status: "error" },
       }));
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
@@ -1056,8 +1092,16 @@ export function BlumAgent() {
               <textarea
                 disabled={isLoading}
                 id="agent-question"
-                maxLength={4000}
-                onChange={(event) => setDraft(event.target.value)}
+                maxLength={MAX_MESSAGE_LENGTH}
+                onChange={(event) => {
+                  const nextDraft = event.target.value;
+                  if (nextDraft.length > MAX_MESSAGE_LENGTH) {
+                    setError(`单条问题不能超过 ${MAX_MESSAGE_LENGTH} 个字符。`);
+                    return;
+                  }
+                  setDraft(nextDraft);
+                  if (error) setError("");
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
                     event.preventDefault();
@@ -1103,7 +1147,7 @@ export function BlumAgent() {
             <div className="composer-meta">
               <span aria-live="polite" className="export-status">{exportStatus}</span>
               <span aria-live="polite" className="character-count">
-                {draft.length} / 4000
+                {draft.length} / {MAX_MESSAGE_LENGTH}
               </span>
               <p className="composer-note">
                 型号、尺寸、承重、孔位与最终下单信息，请以当前市场官方资料复核。
