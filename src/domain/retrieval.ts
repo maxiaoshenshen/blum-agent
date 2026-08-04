@@ -1,4 +1,5 @@
-import { FALLBACK_SOURCE_IDS, OFFICIAL_SOURCES } from "./knowledge";
+import { FALLBACK_SOURCE_IDS } from "./knowledge";
+import { knowledgeRepository } from "./knowledge-repository";
 import type {
   KnowledgeMatch,
   OfficialSource,
@@ -14,6 +15,8 @@ const precisionPatterns = [
   /\bbom\b|下单|订购清单/i,
   /安全|防脱|防坠|儿童/,
 ];
+
+const KNOWLEDGE_SOURCES = knowledgeRepository.getAll();
 
 function normalize(value: string): string {
   return value
@@ -100,7 +103,7 @@ function fuzzyKeywordMatch(question: string, keyword: string): boolean {
 export function isBlumRelated(question: string): boolean {
   const normalizedQuestion = normalizeQuestion(question);
   if (/blum|百隆/u.test(normalizedQuestion)) return true;
-  return OFFICIAL_SOURCES.some((source) =>
+  return KNOWLEDGE_SOURCES.some((source) =>
     source.keywords.some((keyword) => {
       const normalizedKeyword = normalize(keyword);
       return normalizedKeyword.length >= 3 && normalizedQuestion.includes(normalizedKeyword);
@@ -114,19 +117,20 @@ function scoreKeyword(keyword: string): number {
 }
 
 type ScoredMatch = KnowledgeMatch & { semanticScore: number };
+type RankedMatch = ScoredMatch & { index: number };
 
 function semanticSimilarityScore(
-  source: OfficialSource,
+  sourceCategory: ReturnType<typeof categoryFor>,
   requested: ReturnType<typeof categoryFor> | undefined,
 ): number {
-  if (!requested || categoryFor(source) === requested || categoryFor(source) === "other") {
+  if (!requested || sourceCategory === requested || sourceCategory === "other") {
     return 0;
   }
   // 同属柜体功能五金的交叉提示：只作召回兜底，绝不覆盖直接关键词匹配。
   return 0.1;
 }
 
-function optimalF1Threshold(matches: ScoredMatch[]): number {
+function optimalF1Threshold(matches: readonly ScoredMatch[]): number {
   const scored = matches.filter((match) => match.score > 0);
   if (scored.length === 0) return Number.POSITIVE_INFINITY;
 
@@ -153,9 +157,62 @@ function optimalF1Threshold(matches: ScoredMatch[]): number {
   return bestThreshold;
 }
 
+interface PreparedSource {
+  readonly source: OfficialSource;
+  readonly index: number;
+  readonly category: ReturnType<typeof categoryFor>;
+  readonly normalizedKeywords: readonly { readonly raw: string; readonly normalized: string }[];
+}
+
+// 将不随用户问题变化的标准化、分类和索引工作移至模块初始化。
+// Worker 的同一 isolate 后续请求可直接复用此不可变索引。
+const PREPARED_SOURCES: readonly PreparedSource[] = Object.freeze(
+  KNOWLEDGE_SOURCES.map((source, index) => Object.freeze({
+    source,
+    index,
+    category: categoryFor(source),
+    normalizedKeywords: Object.freeze(source.keywords.map((raw) => Object.freeze({ raw, normalized: normalize(raw) }))),
+  })),
+);
+
+const SOURCES_BY_ID = new Map(KNOWLEDGE_SOURCES.map((source) => [source.id, source]));
+const RETRIEVAL_CACHE_LIMIT = 100;
+const retrievalCache = new Map<string, readonly KnowledgeMatch[]>();
+let retrievalCacheHits = 0;
+let retrievalCacheMisses = 0;
+
+function cacheKey(normalizedQuestion: string, safeLimit: number): string {
+  return `${safeLimit}\u0000${normalizedQuestion}`;
+}
+
+function cacheResult(key: string, result: KnowledgeMatch[]): KnowledgeMatch[] {
+  const immutableResult = Object.freeze(result.map((match) => Object.freeze({
+    ...match,
+    matchedKeywords: Object.freeze([...match.matchedKeywords]),
+  }))) as unknown as readonly KnowledgeMatch[];
+  retrievalCache.set(key, immutableResult);
+  if (retrievalCache.size > RETRIEVAL_CACHE_LIMIT) {
+    const oldestKey = retrievalCache.keys().next().value;
+    if (oldestKey) retrievalCache.delete(oldestKey);
+  }
+  return immutableResult as KnowledgeMatch[];
+}
+
+/** 供健康检查和自动化测试读取；不记录用户问题内容。 */
+export function getRetrievalCacheStats(): Readonly<{ size: number; hits: number; misses: number }> {
+  return Object.freeze({ size: retrievalCache.size, hits: retrievalCacheHits, misses: retrievalCacheMisses });
+}
+
+/** 清空进程内 LRU 缓存，主要用于测试与受控运维。 */
+export function resetRetrievalCache(): void {
+  retrievalCache.clear();
+  retrievalCacheHits = 0;
+  retrievalCacheMisses = 0;
+}
+
 export function getFallbackSources(): OfficialSource[] {
   return FALLBACK_SOURCE_IDS.map(
-    (id) => OFFICIAL_SOURCES.find((source) => source.id === id)!,
+    (id) => SOURCES_BY_ID.get(id)!,
   );
 }
 
@@ -166,39 +223,47 @@ export function retrieveKnowledge(
   const normalizedQuestion = normalizeQuestion(question);
   const category = requestedCategory(normalizedQuestion);
   const safeLimit = Math.max(1, Math.min(6, limit));
+  const key = cacheKey(normalizedQuestion, safeLimit);
+  const cached = retrievalCache.get(key);
+  if (cached) {
+    retrievalCacheHits += 1;
+    // Map 的删除再插入维持最少使用项位于开头。
+    retrievalCache.delete(key);
+    retrievalCache.set(key, cached);
+    return cached as KnowledgeMatch[];
+  }
+  retrievalCacheMisses += 1;
 
-  const matches: ScoredMatch[] = OFFICIAL_SOURCES.map((source) => {
-    const matchedKeywords = source.keywords.filter((keyword) => {
-      const normalizedKeyword = normalize(keyword);
-      return normalizedQuestion.includes(normalizedKeyword) || fuzzyKeywordMatch(normalizedQuestion, keyword);
-    });
-    const semanticScore = semanticSimilarityScore(source, category);
+  const matches: RankedMatch[] = PREPARED_SOURCES.map(({ source, index, category: sourceCategory, normalizedKeywords }) => {
+    const matchedKeywords = normalizedKeywords.filter(({ raw, normalized }) => {
+      return normalizedQuestion.includes(normalized) || fuzzyKeywordMatch(normalizedQuestion, raw);
+    }).map(({ raw }) => raw);
+    const semanticScore = semanticSimilarityScore(sourceCategory, category);
     const score = matchedKeywords.reduce(
       (total, keyword) => total + scoreKeyword(keyword),
       0,
-    ) + (category === categoryFor(source) ? 3 : 0) +
+    ) + (category === sourceCategory ? 3 : 0) +
       (category !== undefined && isProductFamilySource(source, category) ? 6 : 0) +
       semanticScore;
 
-    return { source, score, matchedKeywords, semanticScore };
+    return { source, score, matchedKeywords, semanticScore, index };
   })
     .filter((match) => match.score > 0)
     .sort(
       (left, right) =>
         right.score - left.score ||
-        OFFICIAL_SOURCES.indexOf(left.source) -
-          OFFICIAL_SOURCES.indexOf(right.source),
+        left.index - right.index,
     );
 
   const threshold = optimalF1Threshold(matches);
   const selected = matches.filter((match) => match.score >= threshold);
   if (selected.length > 0) {
-    return selected.slice(0, safeLimit).map(({ semanticScore: _semanticScore, ...match }) => match);
+    return cacheResult(key, selected.slice(0, safeLimit).map(({ semanticScore: _semanticScore, index: _index, ...match }) => match));
   }
 
-  return getFallbackSources()
+  return cacheResult(key, getFallbackSources()
     .slice(0, Math.min(2, safeLimit))
-    .map((source) => ({ source, score: 0, matchedKeywords: [] }));
+    .map((source) => ({ source, score: 0, matchedKeywords: [] })));
 }
 
 export function classifyRisk(question: string): RiskLevel {

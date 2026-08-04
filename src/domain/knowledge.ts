@@ -1,6 +1,8 @@
 import type { OfficialSource } from "./types";
 
-export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
+// 知识库在 Worker 冷启动时构建一次；冻结后可安全地在请求之间复用，
+// 也避免任何调用方意外修改官方资料。
+export const OFFICIAL_SOURCES: readonly OfficialSource[] = Object.freeze([
   {
     id: "cliptop-blumotion-full",
     title: "CLIP top BLUMOTION 完整铰链系列",
@@ -2073,12 +2075,12 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
     official: true,
     keywords: ["DXF是什么", "BXF是什么", "Blum BXF", "DXF加工图", "CAM导入", "钻孔数据", "格式说明", "BXF export"],
   },
-] as const satisfies readonly OfficialSource[];
+] as const satisfies readonly OfficialSource[]);
 
-export const FALLBACK_SOURCE_IDS = [
+export const FALLBACK_SOURCE_IDS = Object.freeze([
   "product-catalogue",
   "product-configurator",
   "blum-contact",
   "easy-assembly",
   "quality-certification",
-] as const;
+] as const);

@@ -2,6 +2,7 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { FixedWindowRateLimiter } from "../src/security/rate-limit";
+import { clientIdentity } from "../src/security/client-identity";
 
 interface Env {
   ASSETS: Fetcher;
@@ -27,10 +28,13 @@ const SECURITY_HEADERS = {
   "Referrer-Policy": "origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';",
 } as const;
 
-const chatRateLimiter = new FixedWindowRateLimiter({
+// This is deliberately separate from the application limiter. A Worker may
+// dispatch into the app in the same isolate; sharing the instance would count
+// every request twice and cut the advertised 30/minute budget in half.
+const edgeChatRateLimiter = new FixedWindowRateLimiter({
   limit: 30,
   windowMs: 60_000,
   maxEntries: 10_000,
@@ -72,13 +76,10 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === "/api/chat" && request.method === "POST") {
-      const clientIdentity = request.headers
-        .get("cf-connecting-ip")
-        ?.trim()
-        .slice(0, 64);
-      if (clientIdentity) {
-        const decision = chatRateLimiter.attempt(clientIdentity);
+    if ((url.pathname === "/api/chat" || url.pathname === "/api/chat/stream") && request.method === "POST") {
+      const identity = clientIdentity(request);
+      if (identity !== "unknown") {
+        const decision = edgeChatRateLimiter.attempt(identity);
         if (!decision.allowed) {
           return withSecurityHeaders(
             Response.json(

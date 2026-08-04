@@ -56,6 +56,22 @@ describe("chat request validation", () => {
     ).toThrow(/5 MB/);
   });
 
+  it("rejects a non-image payload disguised as a permitted image data URL", () => {
+    expect(() =>
+      parseChatRequest({
+        ...validRequest,
+        image: "data:image/png;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+      }),
+    ).toThrow(/内容与声明格式不匹配/);
+  });
+
+  it("accepts image bytes only when their MIME type matches a real signature", () => {
+    expect(parseChatRequest({
+      ...validRequest,
+      image: "data:image/png;base64,iVBORw0KGgo=",
+    }).image).toContain("data:image/png");
+  });
+
   it("keeps the latest bounded conversation turns", () => {
     const parsed = parseChatRequest({
       role: "sales",

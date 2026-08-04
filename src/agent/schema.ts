@@ -96,6 +96,28 @@ function parseMessages(value: unknown): ChatMessage[] {
   return messages.slice(-MAX_HISTORY_MESSAGES);
 }
 
+function decodeBase64(base64: string): Uint8Array | undefined {
+  try {
+    const binary = atob(base64);
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    return undefined;
+  }
+}
+
+function isExpectedImageFormat(mimeType: string, bytes: Uint8Array): boolean {
+  if (mimeType === "image/jpeg") {
+    return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (mimeType === "image/png") {
+    return bytes.length >= 8 && bytes.slice(0, 8).every((byte, index) => byte === [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a][index]);
+  }
+  // WebP is a RIFF container whose format marker starts at byte 8.
+  return bytes.length >= 12 &&
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+}
+
 function parseImage(value: unknown): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (typeof value !== "string" || !supportedImagePattern.test(value)) {
@@ -104,7 +126,8 @@ function parseImage(value: unknown): string | undefined {
       "图片仅支持 JPG、PNG 或 WebP 格式。",
     );
   }
-  const base64Payload = value.slice(value.indexOf(",") + 1).replace(/\s/g, "");
+  const [header, encodedPayload] = value.split(",", 2);
+  const base64Payload = encodedPayload?.replace(/\s/g, "") ?? "";
   const paddingLength = base64Payload.endsWith("==")
     ? 2
     : base64Payload.endsWith("=")
@@ -113,6 +136,11 @@ function parseImage(value: unknown): string | undefined {
   const decodedBytes = Math.floor((base64Payload.length * 3) / 4) - paddingLength;
   if (decodedBytes > MAX_IMAGE_BYTES) {
     throw new ValidationError("image_too_large", "图片不能超过 5 MB。");
+  }
+  const bytes = decodeBase64(base64Payload);
+  const mimeType = header!.toLowerCase().replace(/^data:/, "").replace(";base64", "");
+  if (!bytes || !isExpectedImageFormat(mimeType, bytes)) {
+    throw new ValidationError("unsupported_image", "图片内容与声明格式不匹配。");
   }
   return value.replace(/\s/g, "");
 }

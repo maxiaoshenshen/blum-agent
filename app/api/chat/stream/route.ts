@@ -3,7 +3,8 @@ import {
 } from "@/src/agent/chat";
 import { requestChatCompletion } from "@/src/agent/provider";
 import { parseChatRequest, ValidationError } from "@/src/agent/schema";
-import { FixedWindowRateLimiter } from "@/src/security/rate-limit";
+import { chatRateLimiter } from "@/src/security/chat-rate-limit";
+import { clientIdentity } from "@/src/security/client-identity";
 import { buildSystemPrompt } from "@/src/agent/prompt";
 import { getRole } from "@/src/domain/roles";
 import { retrieveKnowledge, classifyRisk } from "@/src/domain/retrieval";
@@ -11,8 +12,11 @@ import type { OfficialSource } from "@/src/domain/types";
 import { ProviderError } from "@/src/agent/provider";
 import { resolveLocale } from "@/src/i18n/messages";
 import {
+  createRequestId,
   recordChatCompletion,
   recordChatFailure,
+  recordChatRequestReceived,
+  recordRateLimitExceeded,
 } from "@/src/observability/chat-analytics";
 
 const API_RESPONSE_HEADERS = {
@@ -23,15 +27,9 @@ const MAX_REQUEST_BYTES = 7_500_000;
 const STREAM_TIMEOUT_MS = 60_000;
 const HEARTBEAT_MS = 15_000;
 
-const globalRateLimiter = new FixedWindowRateLimiter({
-  limit: 30,
-  windowMs: 60_000,
-  maxEntries: 10_000,
-});
-
 async function readJsonBody(request: Request): Promise<unknown> {
-  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.startsWith("application/json")) {
+  const mediaType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
     throw new BodyReadError("unsupported_media_type", "请求必须使用 application/json 格式。", 415);
   }
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
@@ -81,19 +79,23 @@ function sse(key: string, data: unknown): string {
   return `event: ${key}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+function requestIdFor(request: Request): string {
+  const supplied = request.headers.get("x-request-id")?.trim();
+  return supplied && /^[a-zA-Z0-9_-]{8,128}$/.test(supplied) ? supplied : createRequestId();
+}
+
 export async function POST(request: Request): Promise<Response> {
   const startTime = Date.now();
-  const clientIp =
-    request.headers.get("cf-connecting-ip") ??
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    "unknown";
+  const requestId = requestIdFor(request);
+  const clientIp = clientIdentity(request);
 
-  const decision = globalRateLimiter.attempt(clientIp);
+  const decision = chatRateLimiter.attempt(clientIp);
   if (!decision.allowed) {
-    recordChatFailure("rate_limit", Date.now() - startTime);
+    recordRateLimitExceeded({ requestId, clientIp });
+    recordChatFailure({ requestId, errorType: "rate_limit", responseTimeMs: Date.now() - startTime });
     return new Response(
       sse("error", { code: "rate_limited", message: "请求过于频繁，请稍后重试。" }),
-      { status: 429, headers: { ...API_RESPONSE_HEADERS, "Retry-After": String(decision.retryAfterSeconds) } },
+      { status: 429, headers: { ...API_RESPONSE_HEADERS, "X-Request-ID": requestId, "Retry-After": String(decision.retryAfterSeconds) } },
     );
   }
 
@@ -102,16 +104,16 @@ export async function POST(request: Request): Promise<Response> {
     body = await readJsonBody(request);
   } catch (error) {
     if (error instanceof BodyReadError) {
-      recordChatFailure("validation", Date.now() - startTime);
+      recordChatFailure({ requestId, errorType: "validation", responseTimeMs: Date.now() - startTime });
       return new Response(
         sse("error", { code: error.code, message: error.message }),
-        { status: error.status, headers: API_RESPONSE_HEADERS },
+        { status: error.status, headers: { ...API_RESPONSE_HEADERS, "X-Request-ID": requestId } },
       );
     }
-    recordChatFailure("validation", Date.now() - startTime);
+    recordChatFailure({ requestId, errorType: "validation", responseTimeMs: Date.now() - startTime });
     return new Response(
       sse("error", { code: "invalid_json", message: "请求内容不是有效的 JSON。" }),
-      { status: 400, headers: API_RESPONSE_HEADERS },
+      { status: 400, headers: { ...API_RESPONSE_HEADERS, "X-Request-ID": requestId } },
     );
   }
 
@@ -120,25 +122,25 @@ export async function POST(request: Request): Promise<Response> {
     parsed = parseChatRequest(body);
   } catch (error) {
     if (error instanceof ValidationError) {
-      recordChatFailure("validation", Date.now() - startTime);
+      recordChatFailure({ requestId, errorType: "validation", responseTimeMs: Date.now() - startTime });
       return new Response(
         sse("error", { code: error.code, message: error.message }),
-        { status: 400, headers: API_RESPONSE_HEADERS },
+        { status: 400, headers: { ...API_RESPONSE_HEADERS, "X-Request-ID": requestId } },
       );
     }
-    recordChatFailure("unknown", Date.now() - startTime);
+    recordChatFailure({ requestId, errorType: "unknown", responseTimeMs: Date.now() - startTime });
     return new Response(
       sse("error", { code: "internal_error", message: "请求解析失败。" }),
-      { status: 500, headers: API_RESPONSE_HEADERS },
+      { status: 500, headers: { ...API_RESPONSE_HEADERS, "X-Request-ID": requestId } },
     );
   }
 
   const config = providerConfigFromEnvironment();
   if (!config) {
-    recordChatFailure("provider", Date.now() - startTime);
+    recordChatFailure({ requestId, errorType: "provider", responseTimeMs: Date.now() - startTime });
     return new Response(
       sse("error", { code: "no_config", message: "模型服务未配置。" }),
-      { status: 503, headers: API_RESPONSE_HEADERS },
+      { status: 503, headers: { ...API_RESPONSE_HEADERS, "X-Request-ID": requestId } },
     );
   }
 
@@ -158,6 +160,7 @@ export async function POST(request: Request): Promise<Response> {
       ),
   );
   const risk = classifyRisk(question);
+  recordChatRequestReceived({ requestId, role: parsed.role, risk });
   const role = getRole(parsed.role);
   const systemPrompt = buildSystemPrompt({
     role,
@@ -238,6 +241,7 @@ export async function POST(request: Request): Promise<Response> {
             ? ["补充完整产品编号与所在市场", "提供柜体、面板和应用场景参数", "用官方配置器或当前订购手册做最终复核"]
             : ["提供柜体尺寸、门型和期望开合方式", "说明空间、风格与收纳目标"];
           recordChatCompletion({
+            requestId,
             role: parsed.role,
             question_length: question.length,
             has_image: Boolean(parsed.image),
@@ -266,10 +270,12 @@ export async function POST(request: Request): Promise<Response> {
         } catch (error) {
           if (!cancelled) {
             const providerError = error instanceof ProviderError ? error : undefined;
-            recordChatFailure(
-              providerError ? "provider" : "unknown",
-              Date.now() - startTime,
-            );
+            recordChatFailure({
+              requestId,
+              errorType: providerError?.code ?? "unknown",
+              responseTimeMs: Date.now() - startTime,
+              providerStatus: providerError?.status,
+            });
             send("error", {
               code: providerError?.code ?? "internal_error",
               message: providerError?.message ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。",
@@ -288,6 +294,7 @@ export async function POST(request: Request): Promise<Response> {
   return new Response(stream, {
     headers: {
       ...API_RESPONSE_HEADERS,
+      "X-Request-ID": requestId,
       "Content-Type": "text/event-stream; charset=utf-8",
       "Transfer-Encoding": "chunked",
       "Connection": "keep-alive",

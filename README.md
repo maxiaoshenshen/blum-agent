@@ -41,6 +41,19 @@ Agent 层：多轮上下文 Prompt → Provider（OpenAI-compatible API）→ �
 - Agent 层：`src/agent` 生成系统提示、调用模型、过滤无法由官方资料支撑的扩展内容。
 - 知识层：`src/domain/knowledge.ts` 保存官方来源摘要，`retrieval.ts` 提供路由与风险判断。
 
+## 性能与扩展边界
+
+- 检索层在 Worker 初始化时冻结官方知识库，并预计算关键词标准化、产品分类和排序索引；相同的规范化问题使用容量为 100 的进程内 LRU 缓存。缓存不写入用户问题日志，Worker 重启后自然失效。
+- `app/api/chat/performance.test.ts` 覆盖本应用的短、中、长文本与图片请求预算（分别小于 2、5、10、3 秒）；此测试固定为演示模式，测量输入校验、检索和响应开销，不把不受本服务控制的实时 Provider 生成时延伪装为本地性能。
+- `src/domain/knowledge-repository.ts` 定义数据访问边界。当前使用不可变内存知识库；未来接入 D1、KV 或外部检索服务时，应实现 `KnowledgeRepository` 并在数据库侧为稳定 `id` 建索引、只取所需字段、分页/限量查询，避免在 API 层散落查询逻辑。
+- 唯一的图片预览为已校验的本地 Data URL，因此使用原生 `<img>`，不启用 Next 图片优化服务；项目没有远程图片域名。图标通过 `lucide-react` 的具名导入参与 tree-shaking。当前没有适合延迟加载的独立重型交互模块，避免为了拆包而推迟核心对话界面。
+
+运行性能门禁：
+
+```bash
+npm run test:unit -- --run app/api/chat/performance.test.ts src/domain/retrieval.test.ts
+```
+
 ## 快速开始
 
 前置要求：Node.js `>= 22.13.0`，npm `>= 10`。

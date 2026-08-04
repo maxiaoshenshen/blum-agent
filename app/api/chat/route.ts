@@ -4,12 +4,16 @@ import {
 } from "@/src/agent/chat";
 import { ProviderError } from "@/src/agent/provider";
 import { parseChatRequest, ValidationError } from "@/src/agent/schema";
-import { FixedWindowRateLimiter } from "@/src/security/rate-limit";
+import { chatRateLimiter } from "@/src/security/chat-rate-limit";
+import { clientIdentity } from "@/src/security/client-identity";
 import { classifyRisk, retrieveKnowledge } from "@/src/domain/retrieval";
 import { resolveLocale } from "@/src/i18n/messages";
 import {
+  createRequestId,
   recordChatCompletion,
   recordChatFailure,
+  recordChatRequestReceived,
+  recordRateLimitExceeded,
 } from "@/src/observability/chat-analytics";
 
 const MAX_REQUEST_BYTES = 7_500_000;
@@ -17,13 +21,6 @@ const API_RESPONSE_HEADERS = {
   "Cache-Control": "no-store, max-age=0",
   "X-Content-Type-Options": "nosniff",
 } as const;
-
-// 全局限流器实例：30次请求/分钟，按IP追踪
-const globalRateLimiter = new FixedWindowRateLimiter({
-  limit: 30,
-  windowMs: 60_000,
-  maxEntries: 10_000,
-});
 
 class BodyReadError extends Error {
   readonly code: string;
@@ -36,20 +33,25 @@ class BodyReadError extends Error {
   }
 }
 
-function jsonResponse(body: unknown, status = 200) {
+function requestIdFor(request: Request): string {
+  const supplied = request.headers.get("x-request-id")?.trim();
+  return supplied && /^[a-zA-Z0-9_-]{8,128}$/.test(supplied) ? supplied : createRequestId();
+}
+
+function jsonResponse(body: unknown, requestId: string, status = 200) {
   return Response.json(body, {
     status,
-    headers: API_RESPONSE_HEADERS,
+    headers: { ...API_RESPONSE_HEADERS, "X-Request-ID": requestId },
   });
 }
 
-function errorResponse(code: string, message: string, status: number) {
-  return jsonResponse({ error: { code, message } }, status);
+function errorResponse(code: string, message: string, status: number, requestId: string) {
+  return jsonResponse({ error: { code, message } }, requestId, status);
 }
 
 async function readJsonBody(request: Request): Promise<unknown> {
-  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.startsWith("application/json")) {
+  const mediaType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
     throw new BodyReadError(
       "unsupported_media_type",
       "请求必须使用 application/json 格式。",
@@ -104,16 +106,15 @@ async function readJsonBody(request: Request): Promise<unknown> {
 
 export async function POST(request: Request): Promise<Response> {
   const startTime = Date.now();
+  const requestId = requestIdFor(request);
   // 从请求头获取真实IP（支持 CloudFlare 等代理）
-  const clientIp =
-    request.headers.get("cf-connecting-ip") ??
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    "unknown";
+  const clientIp = clientIdentity(request);
 
   // 限流检查
-  const decision = globalRateLimiter.attempt(clientIp);
+  const decision = chatRateLimiter.attempt(clientIp);
   if (!decision.allowed) {
-    recordChatFailure("rate_limit", Date.now() - startTime);
+    recordRateLimitExceeded({ requestId, clientIp });
+    recordChatFailure({ requestId, errorType: "rate_limit", responseTimeMs: Date.now() - startTime });
     return Response.json(
       {
         error: {
@@ -125,6 +126,7 @@ export async function POST(request: Request): Promise<Response> {
         status: 429,
         headers: {
           ...API_RESPONSE_HEADERS,
+          "X-Request-ID": requestId,
           "Retry-After": String(decision.retryAfterSeconds),
           "X-RateLimit-Limit": "30",
           "X-RateLimit-Remaining": "0",
@@ -139,11 +141,11 @@ export async function POST(request: Request): Promise<Response> {
     body = await readJsonBody(request);
   } catch (error) {
     if (error instanceof BodyReadError) {
-      recordChatFailure("validation", Date.now() - startTime);
-      return errorResponse(error.code, error.message, error.status);
+      recordChatFailure({ requestId, errorType: "validation", responseTimeMs: Date.now() - startTime });
+      return errorResponse(error.code, error.message, error.status, requestId);
     }
-    recordChatFailure("validation", Date.now() - startTime);
-    return errorResponse("invalid_json", "请求内容不是有效的 JSON。", 400);
+    recordChatFailure({ requestId, errorType: "validation", responseTimeMs: Date.now() - startTime });
+    return errorResponse("invalid_json", "请求内容不是有效的 JSON。", 400, requestId);
   }
 
   try {
@@ -155,6 +157,7 @@ export async function POST(request: Request): Promise<Response> {
     const matches = retrieveKnowledge(question);
     const retrievalTimeMs = Date.now() - retrievalStartedAt;
     const risk = classifyRisk(question);
+    recordChatRequestReceived({ requestId, role: parsed.role, risk });
     const providerConfig = providerConfigFromEnvironment();
     let modelStartedAt: number | undefined;
     let groundingIntercepted = false;
@@ -169,6 +172,7 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
     recordChatCompletion({
+      requestId,
       role: parsed.role,
       question_length: question.length,
       has_image: Boolean(parsed.image),
@@ -188,21 +192,25 @@ export async function POST(request: Request): Promise<Response> {
         grounding_intercepted: groundingIntercepted,
       },
     });
-    return jsonResponse(answer);
+    return jsonResponse(answer, requestId);
   } catch (error) {
     if (error instanceof ValidationError || error instanceof ProviderError) {
-      recordChatFailure(
-        error instanceof ProviderError ? "provider" : "validation",
-        Date.now() - startTime,
-      );
-      return errorResponse(error.code, error.message, error.status);
+      const providerError = error instanceof ProviderError ? error : undefined;
+      recordChatFailure({
+        requestId,
+        errorType: providerError?.code ?? "validation",
+        responseTimeMs: Date.now() - startTime,
+        providerStatus: providerError?.status,
+      });
+      return errorResponse(error.code, error.message, error.status, requestId);
     }
 
-    recordChatFailure("unknown", Date.now() - startTime);
+    recordChatFailure({ requestId, errorType: "unknown", responseTimeMs: Date.now() - startTime });
     return errorResponse(
       "internal_error",
       "Blum Agent 暂时无法处理这个问题，请稍后重试。",
       500,
+      requestId,
     );
   }
 }

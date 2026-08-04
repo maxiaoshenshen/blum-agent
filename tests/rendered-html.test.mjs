@@ -45,7 +45,7 @@ test("server-renders the finished Chinese Blum Agent shell", async () => {
   );
   assert.equal(
     response.headers.get("content-security-policy"),
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';",
   );
 
   const html = await response.text();

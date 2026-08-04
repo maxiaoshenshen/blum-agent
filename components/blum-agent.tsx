@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   useEffect,
   useMemo,
@@ -1270,7 +1269,8 @@ export function BlumAgent() {
             ) : null}
             {attachment ? (
               <div className="attachment-chip">
-                <Image
+                {/* 本地 Data URL 预览不需要 Next 图片优化服务，原生 img 可减少客户端运行时代码。 */}
+                <img
                   alt={`待发送图片：${attachment.name}`}
                   height={30}
                   onError={() => {
@@ -1278,7 +1278,6 @@ export function BlumAgent() {
                     setError(IMAGE_READ_ERROR_MESSAGE);
                   }}
                   src={attachment.dataUrl}
-                  unoptimized
                   width={30}
                 />
                 <span>{attachment.name}</span>

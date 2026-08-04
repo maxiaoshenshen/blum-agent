@@ -65,19 +65,21 @@ describe("POST /api/chat", () => {
 
     const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
     expect(events).toContainEqual(expect.objectContaining({
-      event: "blum_agent.chat.completed",
+      level: "INFO",
+      event: "chat_response_sent",
+      request_id: expect.any(String),
       role: "installer",
       question_length: expect.any(Number),
       has_image: false,
-      risk_level: "standard",
+      risk: "standard",
       retrieval_matches: expect.any(Number),
       model_provider_used: false,
       mode: "demo",
       confidence: expect.any(String),
-      response_time_ms: expect.any(Number),
+      duration_ms: expect.any(Number),
       retrieval_time_ms: expect.any(Number),
       model_response_time_ms: expect.any(Number),
-      sources_count: expect.any(Number),
+      sources: expect.any(Number),
       followups_count: expect.any(Number),
       quality: {
         is_guarded: false,
@@ -91,15 +93,17 @@ describe("POST /api/chat", () => {
 
   it("records validation errors by anonymous error type in development", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     await post({ role: "designer", messages: [{ role: "user", content: "" }] });
 
     const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
     expect(events).toContainEqual(expect.objectContaining({
-      event: "blum_agent.chat.failed",
+      level: "ERROR",
+      event: "chat_request_failed",
       error_type: "validation",
-      response_time_ms: expect.any(Number),
+      duration_ms: expect.any(Number),
+      request_id: expect.any(String),
       timestamp: expect.any(String),
     }));
   });
@@ -149,6 +153,15 @@ describe("POST /api/chat", () => {
     expect(await oversized.json()).toMatchObject({
       error: { code: "request_too_large" },
     });
+
+    const jsonLookalike = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/jsonp" },
+        body: "{}",
+      }),
+    );
+    expect(jsonLookalike.status).toBe(415);
   });
 
   it("adds no-store and content-sniffing protection to every response", async () => {
@@ -219,5 +232,19 @@ describe("POST /api/chat", () => {
       }),
     );
     expect(forwardedOnly.status).toBe(400);
+  });
+
+  it("does not let a prototype-shaped JSON payload alter request parsing", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "cf-connecting-ip": `192.0.2.${Math.floor(Math.random() * 200) + 1}` },
+        body: '{"__proto__":{"role":"admin"},"role":"consumer","messages":[{"role":"user","content":"BLUMOTION 是什么？"}]}',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { mode: string };
+    expect(body.mode).toBe("demo");
   });
 });

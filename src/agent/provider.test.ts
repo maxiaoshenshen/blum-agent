@@ -41,6 +41,12 @@ describe("model output sanitization", () => {
       ),
     ).toBe("结论：请先核对型号。 [已过滤不安全内容]");
   });
+
+  it("removes residual HTML tags, including event-handler-bearing elements", () => {
+    expect(
+      sanitizeModelText("结论：<a href=\"https://example.test\" onclick=\"alert(1)\">查看资料</a>"),
+    ).toBe("结论：查看资料 [已过滤不安全内容]");
+  });
 });
 
 describe("grounded prompt", () => {

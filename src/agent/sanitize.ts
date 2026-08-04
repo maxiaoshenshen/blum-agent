@@ -22,6 +22,13 @@ export function sanitizeModelText(value: string): string {
       return "";
     },
   );
+  // The UI renders text safely through React, but API consumers may not. This
+  // endpoint promises text, so remove every remaining HTML tag rather than
+  // attempting to preserve a partial HTML allowlist.
+  text = text.replace(/<\/?[a-z][^>]*>/gi, () => {
+    removedUnsafeContent = true;
+    return "";
+  });
   text = text.replace(
     /<\/?(?:script|style|iframe|object|embed|svg|math|img|link|meta|base|form|input|button|video|audio)\b[^>]*>/gi,
     () => {

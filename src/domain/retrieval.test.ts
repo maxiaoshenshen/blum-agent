@@ -3,7 +3,9 @@ import { ROLES, getRole } from "./roles";
 import {
   classifyRisk,
   getFallbackSources,
+  getRetrievalCacheStats,
   retrieveKnowledge,
+  resetRetrievalCache,
 } from "./retrieval";
 
 describe("Blum roles", () => {
@@ -25,6 +27,32 @@ describe("Blum roles", () => {
 });
 
 describe("official knowledge retrieval", () => {
+  it("caches identical normalized questions without changing the returned result", () => {
+    resetRetrievalCache();
+
+    const first = retrieveKnowledge("  MERIVOBOX 抽屉安装  ");
+    const afterFirst = getRetrievalCacheStats();
+    const second = retrieveKnowledge("merivobox 抽屉安装");
+    const afterSecond = getRetrievalCacheStats();
+
+    expect(second).toEqual(first);
+    expect(afterFirst).toEqual({ size: 1, hits: 0, misses: 1 });
+    expect(afterSecond).toEqual({ size: 1, hits: 1, misses: 1 });
+  });
+
+  it("keeps the retrieval hot path below 10ms for repeated queries", () => {
+    resetRetrievalCache();
+    retrieveKnowledge("MERIVOBOX 抽屉安装");
+
+    const startedAt = performance.now();
+    for (let index = 0; index < 1_000; index += 1) {
+      retrieveKnowledge("MERIVOBOX 抽屉安装");
+    }
+    const averageMs = (performance.now() - startedAt) / 1_000;
+
+    expect(averageMs).toBeLessThan(10);
+  });
+
   it("matches Chinese and English product names and returns a relevant AVENTOS entry", () => {
     const matches = retrieveKnowledge("AVENTOS 爱翻 HK top 怎么选？");
     // Top result should be an AVENTOS entry

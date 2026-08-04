@@ -66,19 +66,21 @@ describe("POST /api/chat/stream", () => {
 
     const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
     expect(events).toContainEqual(expect.objectContaining({
-      event: "blum_agent.chat.completed",
+      level: "INFO",
+      event: "chat_response_sent",
+      request_id: expect.any(String),
       role: "designer",
       question_length: expect.any(Number),
       has_image: false,
-      risk_level: "standard",
+      risk: "standard",
       retrieval_matches: expect.any(Number),
       model_provider_used: true,
       mode: "live",
       confidence: "guided",
-      response_time_ms: expect.any(Number),
+      duration_ms: expect.any(Number),
       retrieval_time_ms: expect.any(Number),
       model_response_time_ms: expect.any(Number),
-      sources_count: expect.any(Number),
+      sources: expect.any(Number),
       followups_count: expect.any(Number),
       quality: {
         is_guarded: false,
@@ -92,7 +94,7 @@ describe("POST /api/chat/stream", () => {
 
   it("returns an SSE error when the provider times out", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     requestChatCompletion.mockRejectedValue(
       new ProviderError("timeout", "模型服务响应较慢，请稍后重试。", 504),
     );
@@ -106,9 +108,12 @@ describe("POST /api/chat/stream", () => {
     expect(text).toContain('"code":"timeout"');
     const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
     expect(events).toContainEqual(expect.objectContaining({
-      event: "blum_agent.chat.failed",
-      error_type: "provider",
-      response_time_ms: expect.any(Number),
+      level: "ERROR",
+      event: "provider_error",
+      error_type: "timeout",
+      provider_status: 504,
+      duration_ms: expect.any(Number),
+      request_id: expect.any(String),
       timestamp: expect.any(String),
     }));
   });

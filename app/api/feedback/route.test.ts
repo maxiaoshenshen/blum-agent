@@ -28,11 +28,25 @@ describe("POST /api/feedback", () => {
     expect(await response.json()).toEqual({ success: true });
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(log).toHaveBeenCalledWith(
-      "Blum Agent feedback",
-      expect.objectContaining({ answerId: "answer-123", rating: "helpful" }),
-    );
+    expect(log).not.toHaveBeenCalled();
     log.mockRestore();
+  });
+
+  it("bounds feedback bodies before JSON parsing", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/feedback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": "16385",
+          "cf-connecting-ip": `198.51.100.${Math.floor(Math.random() * 200) + 1}`,
+        },
+        body: "{}",
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ error: { code: "request_too_large" } });
   });
 
   it("rejects malformed feedback and limits the fourth feedback from one IP", async () => {
