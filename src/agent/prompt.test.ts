@@ -85,4 +85,33 @@ describe("Blum Agent system prompt", () => {
     expect(prompt).toContain("根据现有资料");
     expect(prompt).toContain("以下信息待确认");
   });
+
+  it.each([
+    ["designer", "参数 → 方案 → 参考 → 待确认"],
+    ["sales", "卖点 → 对比 → 建议 → 下一步"],
+    ["installer", "工具 → 步骤 → 注意事项 → 验证"],
+    ["consumer", "原因 → 解决方案 → 预防 → 何时需帮助"],
+  ] as const)("requires the dedicated response layout for %s", (roleId, layout) => {
+    const prompt = buildSystemPrompt({
+      role: getRole(roleId),
+      matches: retrieveKnowledge("MERIVOBOX 是什么产品？"),
+      risk: "standard",
+    });
+
+    expect(prompt).toContain(layout);
+  });
+
+  it("states explicit answer caps and prohibited unverified output", () => {
+    const prompt = buildSystemPrompt({
+      role: getRole("sales"),
+      matches: retrieveKnowledge("MERIVOBOX 是什么产品？"),
+      risk: "standard",
+    });
+
+    expect(prompt).toContain("操作答案最多七步");
+    expect(prompt).toContain("选型答案最多六项");
+    expect(prompt).toContain("禁止输出清单");
+    expect(prompt).toContain("竞品对比");
+    expect(prompt).toContain("价格");
+  });
 });

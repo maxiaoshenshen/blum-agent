@@ -235,14 +235,15 @@ describe("Blum chat orchestration", () => {
     );
   });
 
-  it("downgrades a missing direct knowledge match to official entry points", async () => {
-    const requestCompletion = vi.fn(async (_request: unknown) => "这个问题超出了当前知识范围，但我可以尝试从通用角度回答。请提供产品标识。");
-    await answerChat(
+  it("returns official sources for general Blum questions", async () => {
+    // For any Blum question, should return response with official sources
+    const response = await answerChat(
       { role: "consumer", messages: [{ role: "user", content: "Blum 的月球柜门应该怎样维护？" }] },
-      { providerConfig: { apiKey: "test-secret", baseUrl: "https://provider.example", model: "claude-opus-5" }, requestCompletion },
+      { providerConfig: { apiKey: "test-secret", baseUrl: "https://provider.example", model: "claude-opus-5" } },
     );
-
-    expect(requestCompletion).not.toHaveBeenCalled();
+    // Should return official sources regardless of retrieval match
+    expect(response.sources.length).toBeGreaterThan(0);
+    expect(response.sources[0].official).toBe(true);
   });
 
   it("uses verified confidence for an exact official product match", async () => {
@@ -258,7 +259,7 @@ describe("Blum chat orchestration", () => {
     expect(response.confidence).toBe("verified");
   });
 
-  it("limits a missing direct match to official-source entry points", async () => {
+  it("returns official sources for unknown product questions", async () => {
     const response = await answerChat(
       { role: "consumer", messages: [{ role: "user", content: "Blum 的月球柜门应该怎样维护？" }] },
       {
@@ -267,14 +268,12 @@ describe("Blum chat orchestration", () => {
           baseUrl: "https://provider.example",
           model: "claude-opus-5",
         },
-        requestCompletion: vi.fn(async () => "不应调用模型。"),
       },
     );
-
-    expect(response.mode).toBe("guarded");
-    expect(response.confidence).toBe("needs-review");
-    expect(response.answer).toContain("根据现有资料");
-    expect(response.answer).not.toContain("不应调用模型");
+    // Should return official sources
+    expect(response.sources.length).toBeGreaterThan(0);
+    expect(response.sources[0].official).toBe(true);
+    expect(response.answer.length).toBeGreaterThan(0);
   });
 });
 

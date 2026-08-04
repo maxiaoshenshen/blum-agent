@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Sitemap: https://rsxermu666.cn/sitemap.xml
+Sitemap: https://blum-agent-cn.maxiaoshen.chatgpt.site/sitemap.xml

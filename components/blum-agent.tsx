@@ -120,6 +120,12 @@ interface FeedbackState {
   status: "editing" | "submitting" | "submitted" | "error";
 }
 
+interface LongPressMenuState {
+  messageId: string;
+  x: number;
+  y: number;
+}
+
 class RequestError extends Error {
   constructor(
     readonly code?: string,
@@ -411,6 +417,7 @@ export function BlumAgent() {
   const [locale, setLocale] = useState<AppLocale>("zh");
   const [isRolePanelCollapsed, setIsRolePanelCollapsed] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [longPressMenu, setLongPressMenu] = useState<LongPressMenuState | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const helpTriggerRef = useRef<HTMLButtonElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -420,12 +427,24 @@ export function BlumAgent() {
   const isStreamingRef = useRef(false);
   const conversationIdRef = useRef(createId());
   const requestStageTimersRef = useRef<number[]>([]);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
+  const shouldFollowConversationRef = useRef(true);
+  const previousMessageCountRef = useRef(0);
   const [requestStage, setRequestStage] = useState<RequestStage>("retrieving");
   const [hasLongWait, setHasLongWait] = useState(false);
 
   const clearRequestStageTimers = useCallback(() => {
     requestStageTimersRef.current.forEach((timer) => window.clearTimeout(timer));
     requestStageTimersRef.current = [];
+  }, []);
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressStartRef.current = null;
   }, []);
 
   const selectedRole = useMemo(
@@ -442,17 +461,32 @@ export function BlumAgent() {
 
   useEffect(() => {
     const container = conversationRef.current;
-    if (container) {
-      // JSDOM and a few embedded WebViews do not expose Element#scrollTo.
-      // The fallback preserves functional scrolling while capable browsers get
-      // the smooth, compositor-friendly transition.
-      if (typeof container.scrollTo === "function") {
-        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-      } else {
-        container.scrollTop = container.scrollHeight;
-      }
+    if (!container || !shouldFollowConversationRef.current) return;
+
+    // Streaming can update several times per second. Keep those updates
+    // instant so browsers do not queue a stack of expensive smooth-scroll
+    // animations; reserve smooth scrolling for an actual new turn.
+    const hasNewMessage = messages.length > previousMessageCountRef.current;
+    const behavior = hasNewMessage && !isLoading ? "smooth" : "auto";
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({ top: container.scrollHeight, behavior });
+    } else {
+      container.scrollTop = container.scrollHeight;
     }
+    previousMessageCountRef.current = messages.length;
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    const container = conversationRef.current;
+    if (!container) return;
+    const trackScrollPosition = () => {
+      shouldFollowConversationRef.current =
+        container.scrollHeight - container.scrollTop - container.clientHeight < 96;
+    };
+    trackScrollPosition();
+    container.addEventListener("scroll", trackScrollPosition, { passive: true });
+    return () => container.removeEventListener("scroll", trackScrollPosition);
+  }, []);
 
   useEffect(() => {
     // Defer restoration until after the initial render. This preserves hydration
@@ -512,6 +546,8 @@ export function BlumAgent() {
       cancelActiveRequest();
     };
   }, [clearRequestStageTimers]);
+
+  useEffect(() => clearLongPressTimer, [clearLongPressTimer]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -595,6 +631,51 @@ export function BlumAgent() {
     }
     setCopiedSourceId(source.id);
     window.setTimeout(() => setCopiedSourceId(null), 1800);
+  }
+
+  async function copyMessageText(message: TimelineMessage) {
+    try {
+      await navigator.clipboard?.writeText(message.content);
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = message.content;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand("copy");
+      field.remove();
+    }
+    setLongPressMenu(null);
+    announce(locale === "en" ? "Message copied" : "消息已复制");
+  }
+
+  function beginMessageLongPress(messageId: string, clientX: number, clientY: number) {
+    clearLongPressTimer();
+    longPressStartRef.current = { x: clientX, y: clientY };
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTimerRef.current = null;
+      setLongPressMenu({ messageId, x: clientX, y: clientY });
+    }, 550);
+  }
+
+  function moveMessageLongPress(clientX: number, clientY: number) {
+    const start = longPressStartRef.current;
+    if (!start || Math.hypot(clientX - start.x, clientY - start.y) < 10) return;
+    clearLongPressTimer();
+  }
+
+  function keepComposerVisible() {
+    // Let iOS/Android finish resizing visualViewport before aligning the
+    // input. This avoids the familiar keyboard-open layout jump.
+    window.setTimeout(() => {
+      inputRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      const container = conversationRef.current;
+      if (container && shouldFollowConversationRef.current) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 80);
   }
 
   function handleAttachment(file?: File) {
@@ -931,6 +1012,25 @@ export function BlumAgent() {
         {notice || (copiedSourceId ? "资料链接已复制到剪贴板" : "")}
       </p>
       {notice ? <div className="action-notice" role="status">{notice}</div> : null}
+      {longPressMenu ? (() => {
+        const message = messages.find((item) => item.id === longPressMenu.messageId);
+        if (!message) return null;
+        const menuWidth = 142;
+        const left = Math.max(8, Math.min(longPressMenu.x, window.innerWidth - menuWidth - 8));
+        const top = Math.max(8, Math.min(longPressMenu.y - 48, window.innerHeight - 52));
+        return (
+          <div
+            aria-label={locale === "en" ? "Message actions" : "消息操作"}
+            className="message-context-menu"
+            role="menu"
+            style={{ left, top }}
+          >
+            <button onClick={() => void copyMessageText(message)} role="menuitem" type="button">
+              {locale === "en" ? "Copy message" : "复制消息"}
+            </button>
+          </div>
+        );
+      })() : null}
       <h1 className="sr-only">{`${copy.appName} ${copy.workspaceName}`}</h1>
       <header className="topbar">
         <a className="brand" href="#workspace" aria-label="Blum Agent 首页">
@@ -1148,7 +1248,20 @@ export function BlumAgent() {
                           {formatMessageTime(message.createdAt)}
                         </time>
                       </div>
-                      <p>{message.content}</p>
+                      <p
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          setLongPressMenu({ messageId: message.id, x: event.clientX, y: event.clientY });
+                        }}
+                        onPointerDown={(event) => {
+                          if (event.pointerType === "touch") beginMessageLongPress(message.id, event.clientX, event.clientY);
+                        }}
+                        onPointerMove={(event) => moveMessageLongPress(event.clientX, event.clientY)}
+                        onPointerUp={clearLongPressTimer}
+                        onPointerCancel={clearLongPressTimer}
+                      >
+                        {message.content}
+                      </p>
                     </article>
                   ) : (
                     <article
@@ -1174,6 +1287,16 @@ export function BlumAgent() {
                         <p
                           className={`answer-text${isStreamingRef.current && message.id === streamingMessageIdRef.current ? " answer-text-streaming" : ""}`}
                           id={`answer-content-${message.id}`}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            setLongPressMenu({ messageId: message.id, x: event.clientX, y: event.clientY });
+                          }}
+                          onPointerDown={(event) => {
+                            if (event.pointerType === "touch") beginMessageLongPress(message.id, event.clientX, event.clientY);
+                          }}
+                          onPointerMove={(event) => moveMessageLongPress(event.clientX, event.clientY)}
+                          onPointerUp={clearLongPressTimer}
+                          onPointerCancel={clearLongPressTimer}
                         >
                           {message.content.length > 500 && !expandedMessageIds.has(message.id)
                             ? `${message.content.slice(0, 500)}…`
@@ -1356,6 +1479,8 @@ export function BlumAgent() {
                     setError(IMAGE_READ_ERROR_MESSAGE);
                   }}
                   src={attachment.dataUrl}
+                  loading="lazy"
+                  decoding="async"
                   width={30}
                 />
                 <span>{attachment.name}</span>
@@ -1391,6 +1516,7 @@ export function BlumAgent() {
                     if (draft.trim()) void submitQuestion();
                   }
                 }}
+                onFocus={keepComposerVisible}
                 placeholder={formatMessage(copy.placeholder, { role: selectedRoleLabel })}
                 ref={inputRef}
                 rows={2}

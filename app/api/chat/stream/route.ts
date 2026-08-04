@@ -159,7 +159,7 @@ export async function POST(request: Request): Promise<Response> {
     .reverse()
     .find((m) => m.role === "user")!.content;
   const retrievalStartedAt = Date.now();
-  const matches = retrieveKnowledge(question);
+  const matches = retrieveKnowledge(question, 4, parsed.messages);
   const retrievalTimeMs = Date.now() - retrievalStartedAt;
   const hasDirectKnowledgeMatch = matches.some(
     (match) =>

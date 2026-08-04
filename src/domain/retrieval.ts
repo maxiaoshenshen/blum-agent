@@ -100,6 +100,21 @@ function fuzzyKeywordMatch(question: string, keyword: string): boolean {
   });
 }
 
+function keywordMatchStrength(question: string, keyword: string): MatchStrength {
+  const normalizedKeyword = normalize(keyword);
+  if (!normalizedKeyword) return 0;
+  if (question.includes(normalizedKeyword)) return 4;
+
+  const words = question.split(/[^a-z0-9-]+/u).filter(Boolean);
+  if (normalizedKeyword.length >= 3 && words.some((word) => word.startsWith(normalizedKeyword) || normalizedKeyword.startsWith(word))) return 3;
+  if (normalizedKeyword.length >= 4 && question.includes(normalizedKeyword.slice(0, -1))) return 2;
+  return fuzzyKeywordMatch(question, keyword) ? 1 : 0;
+}
+
+function isContextualFollowUp(question: string): boolean {
+  return /(?:这个|这款|它|上一款|该款|this|it|previous)/iu.test(question);
+}
+
 export function isBlumRelated(question: string): boolean {
   const normalizedQuestion = normalizeQuestion(question);
   if (/blum|百隆/u.test(normalizedQuestion)) return true;
@@ -117,7 +132,17 @@ function scoreKeyword(keyword: string): number {
 }
 
 type ScoredMatch = KnowledgeMatch & { semanticScore: number };
-type RankedMatch = ScoredMatch & { index: number };
+type MatchStrength = 0 | 1 | 2 | 3 | 4;
+type RankedMatch = ScoredMatch & {
+  index: number;
+  matchStrength: MatchStrength;
+  historyBoost: number;
+};
+
+export interface RetrievalHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
 function semanticSimilarityScore(
   sourceCategory: ReturnType<typeof categoryFor>,
@@ -181,8 +206,21 @@ const retrievalCache = new Map<string, readonly KnowledgeMatch[]>();
 let retrievalCacheHits = 0;
 let retrievalCacheMisses = 0;
 
-function cacheKey(normalizedQuestion: string, safeLimit: number): string {
-  return `${safeLimit}\u0000${normalizedQuestion}`;
+function cacheKey(
+  normalizedQuestion: string,
+  safeLimit: number,
+  history: readonly RetrievalHistoryMessage[],
+): string {
+  const brief = history.slice(-6).map(({ content }) => normalizeQuestion(content).slice(0, 240)).join("\u0001");
+  return `${safeLimit}\u0000${normalizedQuestion}\u0000${brief}`;
+}
+
+function productIdsMentionedInHistory(history: readonly RetrievalHistoryMessage[]): ReadonlySet<string> {
+  const recentHistory = history.slice(-6).map(({ content }) => normalizeQuestion(content)).join(" ");
+  return new Set(PREPARED_SOURCES
+    .filter(({ source, category }) => isProductFamilySource(source, category))
+    .filter(({ source }) => recentHistory.includes(normalize(source.id)))
+    .map(({ source }) => source.id));
 }
 
 function cacheResult(key: string, result: KnowledgeMatch[]): KnowledgeMatch[] {
@@ -219,11 +257,12 @@ export function getFallbackSources(): OfficialSource[] {
 export function retrieveKnowledge(
   question: string,
   limit = 4,
+  conversationHistory: readonly RetrievalHistoryMessage[] = [],
 ): KnowledgeMatch[] {
   const normalizedQuestion = normalizeQuestion(question);
   const category = requestedCategory(normalizedQuestion);
   const safeLimit = Math.max(1, Math.min(6, limit));
-  const key = cacheKey(normalizedQuestion, safeLimit);
+  const key = cacheKey(normalizedQuestion, safeLimit, conversationHistory);
   const cached = retrievalCache.get(key);
   if (cached) {
     retrievalCacheHits += 1;
@@ -234,10 +273,13 @@ export function retrieveKnowledge(
   }
   retrievalCacheMisses += 1;
 
+  const historyProductIds = productIdsMentionedInHistory(conversationHistory);
+  const followUp = isContextualFollowUp(normalizedQuestion);
   const matches: RankedMatch[] = PREPARED_SOURCES.map(({ source, index, category: sourceCategory, normalizedKeywords }) => {
-    const matchedKeywords = normalizedKeywords.filter(({ raw, normalized }) => {
-      return normalizedQuestion.includes(normalized) || fuzzyKeywordMatch(normalizedQuestion, raw);
-    }).map(({ raw }) => raw);
+    const keywordStrengths = normalizedKeywords.map(({ raw }) => ({ raw, strength: keywordMatchStrength(normalizedQuestion, raw) }));
+    const matchedKeywords = keywordStrengths.filter(({ strength }) => strength > 0).map(({ raw }) => raw);
+    const matchStrength = keywordStrengths.reduce<MatchStrength>((strongest, { strength }) => Math.max(strongest, strength) as MatchStrength, 0);
+    const historyBoost = followUp && historyProductIds.has(source.id) ? 100 : 0;
     const semanticScore = semanticSimilarityScore(sourceCategory, category);
     const score = matchedKeywords.reduce(
       (total, keyword) => total + scoreKeyword(keyword),
@@ -246,11 +288,13 @@ export function retrieveKnowledge(
       (category !== undefined && isProductFamilySource(source, category) ? 6 : 0) +
       semanticScore;
 
-    return { source, score, matchedKeywords, semanticScore, index };
+    return { source, score, matchedKeywords, semanticScore, index, matchStrength, historyBoost };
   })
-    .filter((match) => match.score > 0)
+    .filter((match) => match.score > 0 || match.historyBoost > 0)
     .sort(
       (left, right) =>
+        right.historyBoost - left.historyBoost ||
+        right.matchStrength - left.matchStrength ||
         right.score - left.score ||
         left.index - right.index,
     );
@@ -258,7 +302,13 @@ export function retrieveKnowledge(
   const threshold = optimalF1Threshold(matches);
   const selected = matches.filter((match) => match.score >= threshold);
   if (selected.length > 0) {
-    return cacheResult(key, selected.slice(0, safeLimit).map(({ semanticScore: _semanticScore, index: _index, ...match }) => match));
+    return cacheResult(key, selected.slice(0, safeLimit).map(({
+      semanticScore: _semanticScore,
+      index: _index,
+      matchStrength: _matchStrength,
+      historyBoost: _historyBoost,
+      ...match
+    }) => match));
   }
 
   return cacheResult(key, getFallbackSources()

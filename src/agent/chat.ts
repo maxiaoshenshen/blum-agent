@@ -278,7 +278,7 @@ export async function answerChat(
       sources: [],
     };
   }
-  const matches = retrieveKnowledge(question);
+  const matches = retrieveKnowledge(question, 4, request.messages);
   const answerQuality = answerQualityFor(matches);
   const sources = matches.map(({ source }) => toSourceReference(source));
   const confidence: ConfidenceLevel =

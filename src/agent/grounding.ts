@@ -9,6 +9,7 @@ const verificationGuidancePattern =
   /^(?:(?:如|若)?(?:需|需要|想)?了解(?:具体|完整)?(?:参数|详情|信息)?[，,、]?\s*)?(?:(?:请|建议|可|可以|应|需|需要)\s*)?(?:通过|使用|查阅|查看|查询|参考|核对|复核).*(?:官方|配置器|目录|资料|手册).*$|^(?:具体|完整).{0,20}(?:需|需要).*(?:官方|配置器|目录|资料|手册).*$|^请查看官方资料$|^建议用配置器核实$/u;
 const professionalTermPattern = /(?:磁悬浮|气压|激光|液压|无线|智能|电动)[\p{Script=Han}]{0,4}(?:导轨|铰链|阻尼|弹簧|杯孔|安装板|连接件|锁定装置|抽屉系统|上翻门|电机)/gu;
 const dependentClaimPattern = /^(?:因此|所以|故|由此|这意味着|从而|进而)[，,、]?/u;
+const prohibitedCommercialClaimPattern = /(?:售价|价格|报价|折扣|优惠|现货|库存|交期|发货|到货|竞品|竞争对手|排名|更耐用|性价比最高)/iu;
 const semanticSimilarityThreshold = 0.58;
 
 function normalize(value: string): string {
@@ -77,6 +78,8 @@ function claimIsCovered(
   terms: readonly string[],
 ): boolean {
   const normalizedClaim = normalize(claim);
+
+  if (prohibitedCommercialClaimPattern.test(claim)) return false;
 
   // A complete sentence from an official title or summary remains grounded even
   // if its punctuation/spacing differs from the stored source.

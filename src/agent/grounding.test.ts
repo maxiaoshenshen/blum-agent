@@ -42,6 +42,15 @@ describe("deterministic model grounding gate", () => {
     expect(isGroundedModelAnswer(answer, [merivoboxSource])).toBe(false);
   });
 
+  it.each([
+    "MERIVOBOX 的市场售价是 999 元。",
+    "MERIVOBOX 比竞品更耐用。",
+    "MERIVOBOX 现货充足，三天内发货。",
+  ])("intercepts prohibited commercial claims: %s", (answer) => {
+    expect(isGroundedModelAnswer(answer, [merivoboxSource])).toBe(false);
+    expect(groundModelAnswer(answer, [merivoboxSource])).toBeUndefined();
+  });
+
   it("allows unknown details only when clearly framed as questions", () => {
     expect(
       isGroundedModelAnswer(

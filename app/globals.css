@@ -624,6 +624,9 @@ label:focus-within {
 
 .message {
   animation: message-enter 280ms ease both;
+  /* Offscreen history is not painted until it is near the reading viewport. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
 }
 
 .message + .message {
@@ -1291,7 +1294,7 @@ label:focus-within {
 }
 
 /* Tablet: retain two working columns while allowing the navigation rail to fold. */
-@media (min-width: 768px) and (max-width: 1024px) {
+@media (min-width: 640px) and (max-width: 1024px) {
   .role-panel-toggle {
     display: inline-grid;
   }
@@ -1338,7 +1341,8 @@ label:focus-within {
   }
 }
 
-@media (max-width: 760px) {
+/* Phones: the role selector becomes a touch-scrollable tab rail. */
+@media (max-width: 639px) {
   .topbar {
     height: 64px;
     padding: 0 16px;
@@ -1531,7 +1535,7 @@ label:focus-within {
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 639px) {
   .agent-shell.keyboard-open .workspace {
     height: calc(var(--agent-visual-height, 100dvh) - 64px);
   }
@@ -2089,7 +2093,7 @@ kbd + kbd {
 /* ============================================
    Mobile adjustments for new elements
    ============================================ */
-@media (max-width: 760px) {
+@media (max-width: 639px) {
   .help-button {
     min-height: 32px;
     width: 32px;
@@ -2102,5 +2106,121 @@ kbd + kbd {
 
   .role-list::before {
     display: none;
+  }
+}
+
+/* The 320–374px range is deliberately denser, while preserving 44px targets. */
+@media (max-width: 374px) {
+  .topbar {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand strong {
+    font-size: 14px;
+  }
+
+  .topbar-actions {
+    gap: 5px;
+  }
+
+  .system-status,
+  .export-chat-button {
+    display: none;
+  }
+
+  .role-panel {
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .timeline {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .message-user,
+  .message-assistant {
+    width: 100%;
+  }
+
+  .message-user {
+    padding: 16px;
+  }
+
+  .message-assistant {
+    padding: 17px 13px;
+  }
+
+  .composer-wrap {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .send-button {
+    min-width: 108px;
+  }
+}
+
+/* 375–639px: keep bubbles comfortably readable without spanning the screen. */
+@media (min-width: 375px) and (max-width: 639px) {
+  .message-user {
+    width: min(88%, 420px);
+  }
+
+  .message-assistant {
+    max-width: 620px;
+  }
+}
+
+/* Press-and-hold message actions. The browser's normal text selection remains
+   available because a scroll movement cancels this menu before it opens. */
+.message-context-menu {
+  position: fixed;
+  z-index: 160;
+  min-width: 142px;
+  padding: 5px;
+  border: 1px solid var(--ink);
+  background: var(--white);
+  box-shadow: 5px 5px 0 rgba(25, 26, 23, 0.18);
+}
+
+.message-context-menu button {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.message-context-menu button:hover,
+.message-context-menu button:focus-visible {
+  background: var(--signal-wash);
+  color: var(--signal-dark);
+}
+
+@media (pointer: coarse) {
+  .role-list {
+    scroll-snap-type: x proximity;
+    touch-action: pan-x;
+  }
+
+  .role-button {
+    scroll-snap-align: start;
+  }
+
+  .message-user > p,
+  .answer-text {
+    -webkit-touch-callout: none;
+    touch-action: pan-y;
   }
 }

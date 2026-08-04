@@ -154,7 +154,7 @@ export async function POST(request: Request): Promise<Response> {
       .reverse()
       .find((message) => message.role === "user")!.content;
     const retrievalStartedAt = Date.now();
-    const matches = retrieveKnowledge(question);
+    const matches = retrieveKnowledge(question, 4, parsed.messages);
     const retrievalTimeMs = Date.now() - retrievalStartedAt;
     const risk = classifyRisk(question);
     recordChatRequestReceived({ requestId, role: parsed.role, risk });
