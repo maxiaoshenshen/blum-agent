@@ -77,6 +77,7 @@ function sse(key: string, data: unknown): string {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const start = Date.now();
   const clientIp =
     request.headers.get("cf-connecting-ip") ??
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -144,6 +145,14 @@ export async function POST(request: Request): Promise<Response> {
       ),
   );
   const risk = classifyRisk(question);
+  console.log(JSON.stringify({
+    type: "chat_request",
+    role: parsed.role,
+    risk,
+    hasImage: Boolean(parsed.image),
+    matchCount: matches.length,
+    timestamp: new Date().toISOString(),
+  }));
   const role = getRole(parsed.role);
   const systemPrompt = buildSystemPrompt({
     role,
@@ -179,6 +188,10 @@ export async function POST(request: Request): Promise<Response> {
         clearTimeout(timeout);
         clearInterval(heartbeat);
         request.signal.removeEventListener("abort", abortUpstream);
+        console.log(JSON.stringify({
+          type: "chat_response_time_ms",
+          duration: Date.now() - start,
+        }));
         try { controller.close(); } catch { /* client may have disconnected */ }
       };
       const send = (key: string, data: unknown) => {

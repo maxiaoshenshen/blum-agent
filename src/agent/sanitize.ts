@@ -1,5 +1,6 @@
 export function sanitizeModelText(value: string): string {
   let text = value.replace(/^\uFEFF/, "");
+  let removedUnsafeContent = false;
 
   text = text.replace(
     /<(think|analysis)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
@@ -14,5 +15,30 @@ export function sanitizeModelText(value: string): string {
   );
   if (fenced) text = fenced[1].trim();
 
-  return text.replace(/\n{3,}/g, "\n\n").trim();
+  text = text.replace(
+    /<(?:script|style|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\s*(?:script|style|iframe|object|embed|svg|math)\s*>/gi,
+    () => {
+      removedUnsafeContent = true;
+      return "";
+    },
+  );
+  text = text.replace(
+    /<\/?(?:script|style|iframe|object|embed|svg|math|img|link|meta|base|form|input|button|video|audio)\b[^>]*>/gi,
+    () => {
+      removedUnsafeContent = true;
+      return "";
+    },
+  );
+  text = text.replace(
+    /\b(?:javascript|vbscript|data\s*:\s*text\/html)\s*:[^\s<]*/gi,
+    () => {
+      removedUnsafeContent = true;
+      return "";
+    },
+  );
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
+
+  return removedUnsafeContent
+    ? `${text}${text ? " " : ""}[已过滤不安全内容]`.trim()
+    : text;
 }

@@ -53,6 +53,7 @@ function makeGuardedFetchMock() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 describe("Blum Agent workspace", () => {
@@ -135,6 +136,43 @@ describe("Blum Agent workspace", () => {
     ).toBeInTheDocument();
   });
 
+  it("collects answer feedback and confirms a successful submission", async () => {
+    const fetchMock = makeFetchMock("success");
+    fetchMock.mockImplementation((input: string | URL | Request) => {
+      if (String(input).includes("/api/feedback")) return Promise.resolve(Response.json({ success: true }));
+      return makeFetchMock("success")(input);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "抽屉怎么调？");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+    await screen.findByText(liveResponse.answer);
+    await user.click(screen.getByRole("button", { name: "👍 有帮助" }));
+    await user.type(screen.getByLabelText("哪里不准确？"), "说明很实用");
+    await user.click(screen.getByRole("button", { name: "提交反馈" }));
+
+    expect(await screen.findByText("感谢反馈，我们会持续改进")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/feedback"))).toBe(true);
+  });
+
+  it("restores the newest saved conversation and exports it as text", async () => {
+    localStorage.setItem("blum-agent-conversations-v1", JSON.stringify([{
+      id: "saved-conversation",
+      roleId: "consumer",
+      updatedAt: Date.now(),
+      messages: [{ id: "assistant-1", role: "assistant", content: "已恢复的回答", createdAt: Date.now() }],
+    }]));
+    const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    expect(await screen.findByText("已恢复的回答")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "导出对话" }));
+    expect(copy).toHaveBeenCalledWith(expect.stringContaining("Blum Agent 对话导出"));
+  });
+
   it("validates attachments and allows a supported image to be removed", async () => {
     const user = userEvent.setup({ applyAccept: false });
     render(<BlumAgent />);
@@ -182,7 +220,7 @@ describe("Blum Agent workspace", () => {
 
   it("retries a failed question without duplicating the user turn", async () => {
     let fallbackCalls = 0;
-    const fetchMock = vi.fn((input: string | URL | Request) => {
+    const fetchMock = vi.fn((input: string | URL | Request, _init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/chat/stream")) {
         return Promise.reject(new TypeError("Response body is null"));

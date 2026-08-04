@@ -34,6 +34,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("POST /api/chat/stream", () => {
@@ -53,6 +54,29 @@ describe("POST /api/chat/stream", () => {
     expect(text).toContain('event: chunk\ndata: {"text":"MERIVOBOX "');
     expect(text).toContain("event: done\n");
     expect(text).toContain('"answer":"MERIVOBOX 是金属抽屉系统。"');
+  });
+
+  it("records anonymous request dimensions and end-to-end response duration", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    requestChatCompletion.mockResolvedValue("已完成");
+
+    const response = await post(validBody);
+    await response.text();
+
+    const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "chat_request",
+      role: "designer",
+      risk: "standard",
+      hasImage: false,
+      matchCount: expect.any(Number),
+      timestamp: expect.any(String),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "chat_response_time_ms",
+      duration: expect.any(Number),
+    }));
+    expect(log.mock.calls.flat().join(" ")).not.toContain("MERIVOBOX 是什么产品？");
   });
 
   it("returns an SSE error when the provider times out", async () => {

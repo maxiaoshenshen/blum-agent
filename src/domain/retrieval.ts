@@ -24,13 +24,43 @@ function normalize(value: string): string {
     .trim();
 }
 
-const brandAliasPattern = /百龙|百龍|布鲁姆|布魯姆/gu;
+const brandAliasPattern = /百龙|百龍|白龙|白龍|白隆|布鲁姆|布魯姆/gu;
 const compactBrandAliasPattern = /(^|[^a-z0-9])bl(?=$|[^a-z0-9])/giu;
 
+function levenshteinDistance(left: string, right: string): number {
+  if (left === right) return 0;
+  if (!left) return right.length;
+  if (!right) return left.length;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return previous[right.length];
+}
+
+function normalizeBrandTypo(value: string): string {
+  return value.replace(/[a-z]{3,8}/giu, (token) => {
+    const normalizedToken = token.toLowerCase();
+    return normalizedToken.startsWith("b") && normalizedToken.includes("l") &&
+      levenshteinDistance(normalizedToken, "blum") <= 2
+      ? "blum"
+      : token;
+  });
+}
+
 function normalizeQuestion(value: string): string {
-  return normalize(value)
+  return normalizeBrandTypo(normalize(value)
     .replace(brandAliasPattern, "百隆")
-    .replace(compactBrandAliasPattern, "$1 blum");
+    .replace(compactBrandAliasPattern, "$1 blum"));
 }
 
 function categoryFor(source: OfficialSource): "drawer" | "hinge" | "lift" | "other" {
@@ -62,12 +92,8 @@ function fuzzyKeywordMatch(question: string, keyword: string): boolean {
   if (normalizedKeyword.length < 4 || /[\p{Script=Han}]/u.test(normalizedKeyword)) return false;
   const words = question.split(/[^a-z0-9-]+/u).filter(Boolean);
   return words.some((word) => {
-    if (Math.abs(word.length - normalizedKeyword.length) > 1) return false;
-    let changes = 0;
-    for (let index = 0; index < Math.max(word.length, normalizedKeyword.length); index += 1) {
-      if (word[index] !== normalizedKeyword[index]) changes += 1;
-    }
-    return changes <= 1;
+    if (Math.abs(word.length - normalizedKeyword.length) > 2) return false;
+    return levenshteinDistance(word, normalizedKeyword) <= 2;
   });
 }
 
@@ -87,6 +113,46 @@ function scoreKeyword(keyword: string): number {
   return Math.max(2, Math.min(12, compactLength));
 }
 
+type ScoredMatch = KnowledgeMatch & { semanticScore: number };
+
+function semanticSimilarityScore(
+  source: OfficialSource,
+  requested: ReturnType<typeof categoryFor> | undefined,
+): number {
+  if (!requested || categoryFor(source) === requested || categoryFor(source) === "other") {
+    return 0;
+  }
+  // 同属柜体功能五金的交叉提示：只作召回兜底，绝不覆盖直接关键词匹配。
+  return 0.1;
+}
+
+function optimalF1Threshold(matches: ScoredMatch[]): number {
+  const scored = matches.filter((match) => match.score > 0);
+  if (scored.length === 0) return Number.POSITIVE_INFINITY;
+
+  // 直接命中与由产品类别推断出的交叉五金条目都标为可召回候选，
+  // 在各个候选阈值上计算 precision / recall，并以 F1 选取最保守的同分阈值。
+  // 已获得正分的条目都属于候选相关集：关键词、类别和跨类别五金关系
+  // 分别代表直接、同类和召回兜底三种证据。
+  const relevant = new Set(scored.map((match) => match.source.id));
+  const thresholds = [...new Set(scored.map((match) => match.score))].sort((left, right) => left - right);
+  let bestThreshold = thresholds[0];
+  let bestF1 = -1;
+
+  for (const threshold of thresholds) {
+    const retrieved = scored.filter((match) => match.score >= threshold);
+    const truePositives = retrieved.filter((match) => relevant.has(match.source.id)).length;
+    const precision = retrieved.length === 0 ? 0 : truePositives / retrieved.length;
+    const recall = relevant.size === 0 ? 0 : truePositives / relevant.size;
+    const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+    if (f1 > bestF1) {
+      bestF1 = f1;
+      bestThreshold = threshold;
+    }
+  }
+  return bestThreshold;
+}
+
 export function getFallbackSources(): OfficialSource[] {
   return FALLBACK_SOURCE_IDS.map(
     (id) => OFFICIAL_SOURCES.find((source) => source.id === id)!,
@@ -101,18 +167,20 @@ export function retrieveKnowledge(
   const category = requestedCategory(normalizedQuestion);
   const safeLimit = Math.max(1, Math.min(6, limit));
 
-  const matches = OFFICIAL_SOURCES.map((source) => {
+  const matches: ScoredMatch[] = OFFICIAL_SOURCES.map((source) => {
     const matchedKeywords = source.keywords.filter((keyword) => {
       const normalizedKeyword = normalize(keyword);
       return normalizedQuestion.includes(normalizedKeyword) || fuzzyKeywordMatch(normalizedQuestion, keyword);
     });
+    const semanticScore = semanticSimilarityScore(source, category);
     const score = matchedKeywords.reduce(
       (total, keyword) => total + scoreKeyword(keyword),
       0,
     ) + (category === categoryFor(source) ? 3 : 0) +
-      (category !== undefined && isProductFamilySource(source, category) ? 6 : 0);
+      (category !== undefined && isProductFamilySource(source, category) ? 6 : 0) +
+      semanticScore;
 
-    return { source, score, matchedKeywords };
+    return { source, score, matchedKeywords, semanticScore };
   })
     .filter((match) => match.score > 0)
     .sort(
@@ -122,12 +190,14 @@ export function retrieveKnowledge(
           OFFICIAL_SOURCES.indexOf(right.source),
     );
 
-  if (matches.length > 0) {
-    return matches.slice(0, safeLimit);
+  const threshold = optimalF1Threshold(matches);
+  const selected = matches.filter((match) => match.score >= threshold);
+  if (selected.length > 0) {
+    return selected.slice(0, safeLimit).map(({ semanticScore: _semanticScore, ...match }) => match);
   }
 
   return getFallbackSources()
-    .slice(0, safeLimit)
+    .slice(0, Math.min(2, safeLimit))
     .map((source) => ({ source, score: 0, matchedKeywords: [] }));
 }
 

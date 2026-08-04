@@ -61,6 +61,10 @@ const REQUEST_TIMEOUT_MS = 60_000;
 const RECONNECT_DELAY_MS = 3_000;
 const TIMEOUT_MESSAGE = "这个问题比较复杂，模型正在深入分析，请稍后重试或简化问题";
 const IMAGE_READ_ERROR_MESSAGE = "图片无法识别，请尝试重新上传或描述问题文字";
+const CONVERSATION_STORAGE_KEY = "blum-agent-conversations-v1";
+const MAX_SAVED_CONVERSATIONS = 5;
+const MAX_VISIBLE_MESSAGES = 20;
+const MAX_RESTORED_MESSAGES = 200;
 
 interface Attachment {
   dataUrl: string;
@@ -78,6 +82,19 @@ interface TimelineMessage {
   createdAt?: number;
 }
 
+interface StoredConversation {
+  id: string;
+  roleId: RoleId;
+  messages: TimelineMessage[];
+  updatedAt: number;
+}
+
+interface FeedbackState {
+  rating: "helpful" | "inaccurate";
+  comment: string;
+  status: "editing" | "submitting" | "submitted" | "error";
+}
+
 function createId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -87,6 +104,69 @@ function apiMessages(messages: TimelineMessage[]): ChatMessage[] {
     .filter((message) => message.role === "user" || message.role === "assistant")
     .map(({ role, content }) => ({ role, content }))
     .slice(-11);
+}
+
+function isSafeImageDataUrl(value: string): boolean {
+  return (
+    value.length <= 7_000_000 &&
+    /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i.test(value)
+  );
+}
+
+function readStoredConversations(): StoredConversation[] {
+  try {
+    const raw = window.localStorage.getItem(CONVERSATION_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item): StoredConversation[] => {
+      if (!item || typeof item !== "object") return [];
+      const id = Reflect.get(item, "id");
+      const roleId = Reflect.get(item, "roleId");
+      const messages = Reflect.get(item, "messages");
+      const updatedAt = Reflect.get(item, "updatedAt");
+      if (
+        typeof id !== "string" ||
+        !ROLES.some((role) => role.id === roleId) ||
+        !Array.isArray(messages) ||
+        !Number.isFinite(updatedAt)
+      ) return [];
+      const safeMessages = messages.flatMap((message): TimelineMessage[] => {
+        if (!message || typeof message !== "object") return [];
+        const messageId = Reflect.get(message, "id");
+        const messageRole = Reflect.get(message, "role");
+        const content = Reflect.get(message, "content");
+        if (
+          typeof messageId !== "string" ||
+          (messageRole !== "user" && messageRole !== "assistant") ||
+          typeof content !== "string" ||
+          content.length > 20_000
+        ) return [];
+        return [{
+          id: messageId,
+          role: messageRole,
+          content,
+          ...(typeof Reflect.get(message, "createdAt") === "number" ? { createdAt: Reflect.get(message, "createdAt") as number } : {}),
+        }];
+      });
+      if (!safeMessages.length) return [];
+      return [{ id, roleId: roleId as RoleId, messages: safeMessages.slice(-MAX_RESTORED_MESSAGES), updatedAt: updatedAt as number }];
+    }).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_SAVED_CONVERSATIONS);
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredConversation(conversation: StoredConversation) {
+  try {
+    const otherConversations = readStoredConversations().filter((item) => item.id !== conversation.id);
+    window.localStorage.setItem(
+      CONVERSATION_STORAGE_KEY,
+      JSON.stringify([conversation, ...otherConversations].slice(0, MAX_SAVED_CONVERSATIONS)),
+    );
+  } catch {
+    // Storage can be disabled or full; the in-memory conversation remains usable.
+  }
 }
 
 
@@ -186,6 +266,10 @@ export function BlumAgent() {
   );
   const [copiedSourceId, setCopiedSourceId] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<"online" | "reconnecting">("online");
+  const [feedbackByAnswerId, setFeedbackByAnswerId] = useState<Record<string, FeedbackState>>({});
+  const [showOlderHistory, setShowOlderHistory] = useState(false);
+  const [hasRestoredConversation, setHasRestoredConversation] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const helpTriggerRef = useRef<HTMLButtonElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -193,6 +277,7 @@ export function BlumAgent() {
   const requestVersionRef = useRef(0);
   const streamingMessageIdRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
+  const conversationIdRef = useRef(createId());
 
   const selectedRole = useMemo(
     () => ROLES.find((role) => role.id === roleId)!,
@@ -203,6 +288,26 @@ export function BlumAgent() {
     const container = conversationRef.current;
     if (container) container.scrollTop = container.scrollHeight;
   }, [messages, isLoading, isStreamingRef.current]);
+
+  useEffect(() => {
+    const latest = readStoredConversations()[0];
+    if (latest) {
+      conversationIdRef.current = latest.id;
+      setRoleId(latest.roleId);
+      setMessages(latest.messages);
+    }
+    setHasRestoredConversation(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasRestoredConversation || messages.length === 0) return;
+    writeStoredConversation({
+      id: conversationIdRef.current,
+      roleId,
+      messages: messages.slice(-MAX_RESTORED_MESSAGES),
+      updatedAt: Date.now(),
+    });
+  }, [hasRestoredConversation, messages, roleId]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -292,6 +397,12 @@ export function BlumAgent() {
     reader.addEventListener("load", () => {
       if (typeof reader.result !== "string") {
         setIsUploading(false);
+        setError(IMAGE_READ_ERROR_MESSAGE);
+        return;
+      }
+      if (!isSafeImageDataUrl(reader.result)) {
+        setIsUploading(false);
+        setAttachment(null);
         setError(IMAGE_READ_ERROR_MESSAGE);
         return;
       }
@@ -447,6 +558,14 @@ export function BlumAgent() {
     }
   }
   function startNewConversation() {
+    if (messages.length > 0) {
+      writeStoredConversation({
+        id: conversationIdRef.current,
+        roleId,
+        messages: messages.slice(-MAX_RESTORED_MESSAGES),
+        updatedAt: Date.now(),
+      });
+    }
     requestVersionRef.current += 1;
     activeRequestRef.current?.abort();
     activeRequestRef.current = null;
@@ -457,7 +576,68 @@ export function BlumAgent() {
     setConnectionState("online");
     setIsLoading(false);
     isStreamingRef.current = false;
+    conversationIdRef.current = createId();
+    setFeedbackByAnswerId({});
+    setShowOlderHistory(false);
+    setExportStatus("");
     inputRef.current?.focus();
+  }
+
+  function chooseFeedback(answerId: string, rating: FeedbackState["rating"]) {
+    setFeedbackByAnswerId((current) => ({
+      ...current,
+      [answerId]: { rating, comment: current[answerId]?.comment ?? "", status: "editing" },
+    }));
+  }
+
+  async function submitFeedback(answerId: string) {
+    const feedback = feedbackByAnswerId[answerId];
+    if (!feedback || feedback.status === "submitting") return;
+    setFeedbackByAnswerId((current) => ({
+      ...current,
+      [answerId]: { ...feedback, status: "submitting" },
+    }));
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answerId,
+          rating: feedback.rating,
+          ...(feedback.comment.trim() ? { comment: feedback.comment.trim() } : {}),
+          timestamp: Date.now(),
+        }),
+      });
+      if (!response.ok) throw new Error("feedback request failed");
+      setFeedbackByAnswerId((current) => ({
+        ...current,
+        [answerId]: { ...feedback, status: "submitted" },
+      }));
+    } catch {
+      setFeedbackByAnswerId((current) => ({
+        ...current,
+        [answerId]: { ...feedback, status: "error" },
+      }));
+    }
+  }
+
+  async function exportConversation() {
+    if (!messages.length) {
+      setExportStatus("当前没有可导出的对话");
+      return;
+    }
+    const exported = [
+      "Blum Agent 对话导出",
+      `角色：${selectedRole.label}`,
+      "",
+      ...messages.map((message) => `${message.role === "user" ? "用户" : "Blum Agent"}：${message.content}`),
+    ].join("\n");
+    try {
+      await navigator.clipboard?.writeText(exported);
+      setExportStatus("对话已复制到剪贴板");
+    } catch {
+      setExportStatus("复制失败，请检查浏览器剪贴板权限");
+    }
   }
 
   function closeHelp() {
@@ -501,6 +681,14 @@ export function BlumAgent() {
           >
             <RefreshCcw aria-hidden="true" size={15} />
             开始新对话
+          </button>
+          <button
+            className="export-chat-button"
+            disabled={messages.length === 0}
+            onClick={() => void exportConversation()}
+            type="button"
+          >
+            导出对话
           </button>
           <div className="system-status" aria-label={connectionState === "online" ? "系统在线" : "正在重新连接"}>
             <span className="status-dot" aria-hidden="true" />
@@ -632,7 +820,19 @@ export function BlumAgent() {
               </div>
             ) : (
               <div className="timeline">
-                {messages.map((message) =>
+                {messages.length > MAX_VISIBLE_MESSAGES ? (
+                  <button
+                    aria-expanded={showOlderHistory}
+                    className="history-toggle"
+                    onClick={() => setShowOlderHistory((current) => !current)}
+                    type="button"
+                  >
+                    {showOlderHistory
+                      ? "收起早期历史"
+                      : `查看更多历史（${messages.length - MAX_VISIBLE_MESSAGES} 条）`}
+                  </button>
+                ) : null}
+                {(showOlderHistory ? messages : messages.slice(-MAX_VISIBLE_MESSAGES)).map((message) =>
                   message.role === "user" ? (
                     <article className="message message-user" key={message.id}>
                       <div className="message-author">
@@ -698,6 +898,59 @@ export function BlumAgent() {
                           已进入安全复核模式：只展示官方资料明确支持的内容，未展示无法验证的模型扩展。
                         </p>
                       ) : null}
+                      {message.content ? (() => {
+                        const feedback = feedbackByAnswerId[message.id];
+                        return (
+                          <div className="answer-feedback" aria-label="回答反馈">
+                            {feedback?.status === "submitted" ? (
+                              <p role="status">感谢反馈，我们会持续改进</p>
+                            ) : (
+                              <>
+                                <span>这条回答有帮助吗？</span>
+                                <div className="feedback-actions">
+                                  <button
+                                    aria-pressed={feedback?.rating === "helpful"}
+                                    onClick={() => chooseFeedback(message.id, "helpful")}
+                                    type="button"
+                                  >
+                                    👍 有帮助
+                                  </button>
+                                  <button
+                                    aria-pressed={feedback?.rating === "inaccurate"}
+                                    onClick={() => chooseFeedback(message.id, "inaccurate")}
+                                    type="button"
+                                  >
+                                    👎 不准确
+                                  </button>
+                                </div>
+                                {feedback ? (
+                                  <div className="feedback-form">
+                                    <label htmlFor={`feedback-comment-${message.id}`}>哪里不准确？</label>
+                                    <textarea
+                                      id={`feedback-comment-${message.id}`}
+                                      maxLength={1000}
+                                      onChange={(event) => setFeedbackByAnswerId((current) => ({
+                                        ...current,
+                                        [message.id]: { ...feedback, comment: event.target.value, status: "editing" },
+                                      }))}
+                                      placeholder="可选填写，帮助我们持续改进"
+                                      value={feedback.comment}
+                                    />
+                                    <button
+                                      disabled={feedback.status === "submitting"}
+                                      onClick={() => void submitFeedback(message.id)}
+                                      type="button"
+                                    >
+                                      {feedback.status === "submitting" ? "正在提交…" : "提交反馈"}
+                                    </button>
+                                    {feedback.status === "error" ? <p className="feedback-error" role="alert">反馈暂未提交，请稍后重试</p> : null}
+                                  </div>
+                                ) : null}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })() : null}
                       {message.sources?.length ? (
                         <div className="source-section">
                           <h2>参考的官方资料</h2>
@@ -848,6 +1101,7 @@ export function BlumAgent() {
               </div>
             </form>
             <div className="composer-meta">
+              <span aria-live="polite" className="export-status">{exportStatus}</span>
               <span aria-live="polite" className="character-count">
                 {draft.length} / 4000
               </span>

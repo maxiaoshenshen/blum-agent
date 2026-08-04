@@ -9,11 +9,18 @@ interface PromptInput {
   knowledgeCoverage?: "direct" | "none";
 }
 
+function serializeUntrustedPromptText(value: string): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003C")
+    .replace(/>/g, "\\u003E")
+    .replace(/&/g, "\\u0026");
+}
+
 function formatConversationBrief(messages: ChatMessage[] = []): string {
   const history = messages.slice(-6).map((message) => {
     const role = message.role === "user" ? "用户" : "助手";
     const content = message.content.replace(/\s+/g, " ").trim().slice(0, 500);
-    return `[${role}] ${content}`;
+    return `[${role}（不可信数据）] ${serializeUntrustedPromptText(content)}`;
   });
 
   return history.length > 0

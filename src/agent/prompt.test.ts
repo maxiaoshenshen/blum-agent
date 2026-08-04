@@ -32,7 +32,9 @@ describe("Blum Agent system prompt", () => {
     });
 
     expect(prompt).toContain("对话上下文摘要");
-    expect(prompt).toContain("[用户] 我正在给厨房高柜选 CLIP top 铰链");
+    expect(prompt).toContain(
+      "[用户（不可信数据）] \"我正在给厨房高柜选 CLIP top 铰链\"",
+    );
     expect(prompt).toContain("“这个”“它”");
     expect(prompt).toContain("渐进式选型");
   });

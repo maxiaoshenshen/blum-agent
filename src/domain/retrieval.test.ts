@@ -49,6 +49,7 @@ describe("official knowledge retrieval", () => {
   it("recognizes common Chinese phonetic typos and compact brand aliases", () => {
     expect(retrieveKnowledge("百龙铰链怎么调")[0].source.id).toMatch(/hinge|blumotion/);
     expect(retrieveKnowledge("bl 抽屉系统")[0].source.id).toMatch(/drawer|merivobox|legrabox|tandembox/);
+    expect(retrieveKnowledge("bllum 铰链怎么调")[0].source.id).toMatch(/hinge|blumotion/);
   });
 
   it("keeps specific merivobox results ahead of generic catalogue results", () => {
@@ -77,14 +78,13 @@ describe("official knowledge retrieval", () => {
     expect(expectedIds).toContain(id);
   });
 
-  it("returns bounded generic official sources for an unknown Blum question", () => {
+  it("returns one or two best official sources instead of an empty result for an unknown Blum question", () => {
     const matches = retrieveKnowledge("这是一个没有产品关键词的问题", 3);
 
-    expect(matches).toHaveLength(3);
+    expect(matches).toHaveLength(2);
     expect(matches.map(({ source }) => source.id)).toEqual([
       "product-catalogue",
       "product-configurator",
-      "blum-contact",
     ]);
   });
 

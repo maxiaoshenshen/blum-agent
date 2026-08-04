@@ -5,6 +5,7 @@ import {
 import { ProviderError } from "@/src/agent/provider";
 import { parseChatRequest, ValidationError } from "@/src/agent/schema";
 import { FixedWindowRateLimiter } from "@/src/security/rate-limit";
+import { classifyRisk, retrieveKnowledge } from "@/src/domain/retrieval";
 
 const MAX_REQUEST_BYTES = 7_500_000;
 const API_RESPONSE_HEADERS = {
@@ -97,6 +98,7 @@ async function readJsonBody(request: Request): Promise<unknown> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const start = Date.now();
   // 从请求头获取真实IP（支持 CloudFlare 等代理）
   const clientIp =
     request.headers.get("cf-connecting-ip") ??
@@ -138,6 +140,18 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const parsed = parseChatRequest(body);
+    const question = [...parsed.messages]
+      .reverse()
+      .find((message) => message.role === "user")!.content;
+    const matches = retrieveKnowledge(question);
+    console.log(JSON.stringify({
+      type: "chat_request",
+      role: parsed.role,
+      risk: classifyRisk(question),
+      hasImage: Boolean(parsed.image),
+      matchCount: matches.length,
+      timestamp: new Date().toISOString(),
+    }));
     const answer = await answerChat(parsed, {
       providerConfig: providerConfigFromEnvironment(),
     });
@@ -152,5 +166,10 @@ export async function POST(request: Request): Promise<Response> {
       "Blum Agent 暂时无法处理这个问题，请稍后重试。",
       500,
     );
+  } finally {
+    console.log(JSON.stringify({
+      type: "chat_response_time_ms",
+      duration: Date.now() - start,
+    }));
   }
 }

@@ -13,6 +13,7 @@ function post(body: unknown) {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("POST /api/chat", () => {
@@ -48,6 +49,33 @@ describe("POST /api/chat", () => {
     expect(response.status).toBe(200);
     expect(body.mode).toBe("demo");
     expect(body.sources[0].id).toBe("aventos-hf");
+  });
+
+  it("records anonymous request dimensions and response duration without logging question text", async () => {
+    vi.stubEnv("PROVIDER_BASE_URL", "");
+    vi.stubEnv("PROVIDER_API_KEY", "");
+    vi.stubEnv("PROVIDER_MODEL", "");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await post({
+      role: "installer",
+      messages: [{ role: "user", content: "MERIVOBOX 安装要注意什么？" }],
+    });
+
+    const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "chat_request",
+      role: "installer",
+      risk: "standard",
+      hasImage: false,
+      matchCount: expect.any(Number),
+      timestamp: expect.any(String),
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "chat_response_time_ms",
+      duration: expect.any(Number),
+    }));
+    expect(log.mock.calls.flat().join(" ")).not.toContain("MERIVOBOX 安装要注意什么？");
   });
 
   it("rejects malformed JSON without leaking implementation details", async () => {
