@@ -6,12 +6,21 @@ import {
   useMemo,
   useRef,
   useState,
+  useCallback,
+  type ReactNode,
+  type CSSProperties,
   type FormEvent,
 } from "react";
 import { ROLES } from "@/src/domain/roles";
 import type { SourceReference } from "@/src/agent/chat";
 import type { ChatMessage } from "@/src/agent/schema";
 import type { ConfidenceLevel, RoleId } from "@/src/domain/types";
+import {
+  detectLocaleFromText,
+  formatMessage,
+  getMessages,
+  type AppLocale,
+} from "@/src/i18n/messages";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -32,6 +41,7 @@ import {
   Wrench,
   X,
 } from "./icons";
+import { ErrorBoundary } from "./error-boundary";
 
 const roleIcons = {
   designer: DraftingCompass,
@@ -57,6 +67,15 @@ const confidenceLabels: Record<ConfidenceLevel, string> = {
   "needs-review": "下单 / 加工前复核",
 };
 
+const englishRoleLabels: Record<RoleId, string> = {
+  designer: "Designer",
+  sales: "Sales",
+  installer: "Installer",
+  production: "Production",
+  procurement: "Procurement",
+  consumer: "Homeowner",
+};
+
 const REQUEST_TIMEOUT_MS = 60_000;
 const RECONNECT_DELAY_MS = 3_000;
 const TIMEOUT_MESSAGE = "这个问题比较复杂，模型正在深入分析，请稍后重试或简化问题";
@@ -67,6 +86,16 @@ const MAX_SAVED_CONVERSATIONS = 5;
 const MAX_VISIBLE_MESSAGES = 20;
 const MAX_RESTORED_MESSAGES = 200;
 const MAX_MESSAGE_LENGTH = 4_000;
+const REQUEST_STAGE_DELAYS = [1_200, 2_800] as const;
+const LONG_WAIT_DELAY_MS = 10_000;
+
+type RequestStage = "retrieving" | "analyzing" | "composing";
+
+const requestStageLabels: Record<RequestStage, string> = {
+  retrieving: "正在检索 Blum 资料",
+  analyzing: "正在分析问题",
+  composing: "正在组织答案",
+};
 
 interface Attachment {
   dataUrl: string;
@@ -99,6 +128,38 @@ interface FeedbackState {
 
 function createId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asSourceReferences(value: unknown): SourceReference[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((source): source is SourceReference =>
+    isRecord(source) &&
+    typeof source.id === "string" &&
+    typeof source.title === "string" &&
+    typeof source.url === "string" &&
+    typeof source.summary === "string" &&
+    typeof source.official === "boolean",
+  );
+}
+
+function asFollowUps(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function asConfidence(value: unknown): ConfidenceLevel {
+  return value === "verified" || value === "needs-review" || value === "guided" ? value : "guided";
+}
+
+function asMode(value: unknown): NonNullable<TimelineMessage["mode"]> {
+  return value === "demo" || value === "guarded" || value === "live" ? value : "live";
+}
+
+function RegionBoundary({ children }: { children: ReactNode }) {
+  return <ErrorBoundary fallback={<div className="section-error" role="alert">此区域暂时无法显示，请刷新页面重试。</div>}>{children}</ErrorBoundary>;
 }
 
 function apiMessages(messages: TimelineMessage[]): ChatMessage[] {
@@ -191,17 +252,30 @@ function writeStoredConversation(conversation: StoredConversation) {
 
 function HelpOverlay({ onClose }: { onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const requestClose = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(onClose, 200);
+  }, [isClosing, onClose]);
 
   useEffect(() => {
     const closeButton = panelRef.current?.querySelector<HTMLButtonElement>("button");
     closeButton?.focus();
 
     function handleKey(e: KeyboardEvent) {
+      // Escape is intentionally immediate: keyboard users expect the dialog
+      // to be gone (and focus restored) as soon as the key is released.
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    };
+  }, [requestClose]);
 
   function trapFocus(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Tab") return;
@@ -224,7 +298,7 @@ function HelpOverlay({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="help-overlay-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`help-overlay-backdrop${isClosing ? " is-closing" : ""}`} onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
       <div
         aria-labelledby="help-dialog-title"
         aria-modal="true"
@@ -236,7 +310,7 @@ function HelpOverlay({ onClose }: { onClose: () => void }) {
       >
         <div className="help-overlay-header">
           <h2 id="help-dialog-title">使用帮助</h2>
-          <button className="help-close-btn" onClick={onClose} type="button" aria-label="关闭帮助">
+          <button className="help-close-btn" onClick={requestClose} type="button" aria-label="关闭帮助">
             <X aria-hidden="true" size={20} />
           </button>
         </div>
@@ -289,6 +363,9 @@ export function BlumAgent() {
   const [showOlderHistory, setShowOlderHistory] = useState(false);
   const [hasRestoredConversation, setHasRestoredConversation] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
+  const [locale, setLocale] = useState<AppLocale>("zh");
+  const [isRolePanelCollapsed, setIsRolePanelCollapsed] = useState(false);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const helpTriggerRef = useRef<HTMLButtonElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -297,15 +374,34 @@ export function BlumAgent() {
   const streamingMessageIdRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
   const conversationIdRef = useRef(createId());
+  const requestStageTimersRef = useRef<number[]>([]);
+  const [requestStage, setRequestStage] = useState<RequestStage>("retrieving");
+  const [hasLongWait, setHasLongWait] = useState(false);
+
+  const clearRequestStageTimers = useCallback(() => {
+    requestStageTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    requestStageTimersRef.current = [];
+  }, []);
 
   const selectedRole = useMemo(
     () => ROLES.find((role) => role.id === roleId)!,
     [roleId],
   );
+  const copy = getMessages(locale);
+  const selectedRoleLabel = locale === "en" ? englishRoleLabels[selectedRole.id] : selectedRole.label;
 
   useEffect(() => {
     const container = conversationRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
+    if (container) {
+      // JSDOM and a few embedded WebViews do not expose Element#scrollTo.
+      // The fallback preserves functional scrolling while capable browsers get
+      // the smooth, compositor-friendly transition.
+      if (typeof container.scrollTo === "function") {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -324,6 +420,24 @@ export function BlumAgent() {
   }, []);
 
   useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const updateViewport = () => {
+      const keyboardHeight = window.innerHeight - viewport.height;
+      setIsKeyboardOpen(window.innerWidth < 768 && keyboardHeight > 150);
+      document.documentElement.style.setProperty("--agent-visual-height", `${Math.round(viewport.height)}px`);
+    };
+    updateViewport();
+    viewport.addEventListener("resize", updateViewport);
+    window.addEventListener("resize", updateViewport);
+    return () => {
+      viewport.removeEventListener("resize", updateViewport);
+      window.removeEventListener("resize", updateViewport);
+      document.documentElement.style.removeProperty("--agent-visual-height");
+    };
+  }, []);
+
+  useEffect(() => {
     if (!hasRestoredConversation || messages.length === 0) return;
     writeStoredConversation({
       id: conversationIdRef.current,
@@ -339,6 +453,7 @@ export function BlumAgent() {
       activeRequestRef.current?.abort();
       activeRequestRef.current = null;
       isStreamingRef.current = false;
+      clearRequestStageTimers();
     };
 
     window.addEventListener("beforeunload", cancelActiveRequest);
@@ -346,7 +461,7 @@ export function BlumAgent() {
       window.removeEventListener("beforeunload", cancelActiveRequest);
       cancelActiveRequest();
     };
-  }, []);
+  }, [clearRequestStageTimers]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -387,13 +502,15 @@ export function BlumAgent() {
 
   function chooseStarter(prompt: string) {
     setDraft(prompt);
+    const promptLocale = detectLocaleFromText(prompt);
+    if (promptLocale) setLocale(promptLocale);
     setError("");
     inputRef.current?.focus();
   }
 
   function formatMessageTime(timestamp?: number): string {
     if (!timestamp) return "";
-    return new Intl.DateTimeFormat("zh-CN", {
+    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
@@ -476,6 +593,8 @@ export function BlumAgent() {
       setError(`单条问题不能超过 ${MAX_MESSAGE_LENGTH} 个字符。`);
       return;
     }
+    const requestLocale = detectLocaleFromText(question) ?? locale;
+    if (requestLocale !== locale) setLocale(requestLocale);
 
     const userMessage: TimelineMessage = {
       id: createId(),
@@ -494,6 +613,14 @@ export function BlumAgent() {
     requestVersionRef.current = requestVersion;
     const controller = new AbortController();
     activeRequestRef.current = controller;
+    clearRequestStageTimers();
+    setRequestStage("retrieving");
+    setHasLongWait(false);
+    requestStageTimersRef.current = [
+      window.setTimeout(() => setRequestStage("analyzing"), REQUEST_STAGE_DELAYS[0]),
+      window.setTimeout(() => setRequestStage("composing"), REQUEST_STAGE_DELAYS[1]),
+      window.setTimeout(() => setHasLongWait(true), LONG_WAIT_DELAY_MS),
+    ];
 
     const streamingMsgId = createId();
     streamingMessageIdRef.current = streamingMsgId;
@@ -525,7 +652,7 @@ export function BlumAgent() {
         try {
           const response = await fetch("/api/chat/stream", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "Accept-Language": requestLocale === "en" ? "en" : "zh-CN" },
             body: JSON.stringify({ role: roleId, messages: apiMessages(nextMessages), image: attachment?.dataUrl }),
             signal: controller.signal,
           });
@@ -549,19 +676,23 @@ export function BlumAgent() {
               if (!nextLine?.startsWith("data: ")) continue;
               i += 1;
               let data: Record<string, unknown>;
-              try { data = JSON.parse(nextLine.slice(6).trim()) as Record<string, unknown>; } catch { continue; }
+              try {
+                const parsed: unknown = JSON.parse(nextLine.slice(6).trim());
+                if (!isRecord(parsed)) continue;
+                data = parsed;
+              } catch { continue; }
               const eventName = trimmed.slice(7).trim();
               if (requestVersion !== requestVersionRef.current) {
                 await reader.cancel();
                 return;
               }
               if (eventName === "start") {
-                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, sources: data.sources as SourceReference[] } : m));
+                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, sources: asSourceReferences(data.sources) } : m));
               } else if (eventName === "chunk") {
                 setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: m.content + String(data.text ?? "") } : m));
               } else if (eventName === "done") {
                 completed = true;
-                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: String(data.answer ?? ""), confidence: data.confidence as ConfidenceLevel, followUps: data.followUps as string[], mode: "live", sources: data.sources as SourceReference[] } : m));
+                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: typeof data.answer === "string" ? data.answer : "", confidence: asConfidence(data.confidence), followUps: asFollowUps(data.followUps), mode: "live", sources: asSourceReferences(data.sources) } : m));
               } else if (eventName === "error") {
                 throw new Error(String(data.message ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。"));
               }
@@ -580,17 +711,20 @@ export function BlumAgent() {
           try {
             const fallbackResponse = await fetch("/api/chat", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", "Accept-Language": requestLocale === "en" ? "en" : "zh-CN" },
               body: JSON.stringify({ role: roleId, messages: apiMessages(nextMessages), image: attachment?.dataUrl }),
               signal: controller.signal,
             });
-            const body = (await fallbackResponse.json()) as { answer?: string; error?: { message?: string }; sources?: SourceReference[]; confidence?: ConfidenceLevel; followUps?: string[]; mode?: "live" | "demo" | "guarded" };
-            if (!fallbackResponse.ok || !("answer" in body)) {
-              restoreQuestion(body.error?.message ?? "暂时无法获得回答，请稍后重试。", true);
+            const parsedBody: unknown = await fallbackResponse.json();
+            const body = isRecord(parsedBody) ? parsedBody : {};
+            const bodyError = isRecord(body.error) && typeof body.error.message === "string" ? body.error.message : undefined;
+            if (!fallbackResponse.ok || typeof body.answer !== "string") {
+              restoreQuestion(bodyError ?? "暂时无法获得回答，请稍后重试。", true);
               return;
             }
             if (requestVersion !== requestVersionRef.current) return;
-            setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: body.answer as string, confidence: body.confidence ?? "guided", followUps: body.followUps ?? [], mode: body.mode ?? "live", sources: body.sources ?? [] } : m));
+            const answer = body.answer;
+            setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: answer, confidence: asConfidence(body.confidence), followUps: asFollowUps(body.followUps), mode: asMode(body.mode), sources: asSourceReferences(body.sources) } : m));
             setAttachment(null);
             setConnectionState("online");
             return;
@@ -610,6 +744,8 @@ export function BlumAgent() {
       }
     } finally {
       window.clearTimeout(timeout);
+      clearRequestStageTimers();
+      setHasLongWait(false);
       isStreamingRef.current = false;
       if (requestVersion === requestVersionRef.current) {
         setIsLoading(false);
@@ -637,6 +773,8 @@ export function BlumAgent() {
     setConnectionState("online");
     setIsLoading(false);
     isStreamingRef.current = false;
+    clearRequestStageTimers();
+    setHasLongWait(false);
     conversationIdRef.current = createId();
     setFeedbackByAnswerId({});
     setShowOlderHistory(false);
@@ -712,12 +850,12 @@ export function BlumAgent() {
   }
 
   return (
-    <main className="agent-shell" id="workspace">
+    <main className={`agent-shell${isKeyboardOpen ? " keyboard-open" : ""}`} data-locale={locale} id="workspace">
       {showHelp && <HelpOverlay onClose={closeHelp} />}
       <p aria-live="polite" className="sr-only" role="status">
         {copiedSourceId ? "资料链接已复制到剪贴板" : ""}
       </p>
-      <h1 className="sr-only">Blum Agent 百隆五金智能工作台</h1>
+      <h1 className="sr-only">{`${copy.appName} ${copy.workspaceName}`}</h1>
       <header className="topbar">
         <a className="brand" href="#workspace" aria-label="Blum Agent 首页">
           <span className="brand-mark" aria-hidden="true">
@@ -725,7 +863,7 @@ export function BlumAgent() {
           </span>
           <span>
             <strong>Blum Agent</strong>
-            <small>百隆五金智能工作台</small>
+            <small>{copy.workspaceName}</small>
           </span>
         </a>
         <div className="topbar-actions">
@@ -733,7 +871,7 @@ export function BlumAgent() {
             className="help-button"
             aria-controls="help-dialog"
             aria-expanded={showHelp}
-            aria-label="打开使用帮助"
+            aria-label={locale === "zh" ? "打开使用帮助" : copy.help}
             onClick={() => setShowHelp(true)}
             ref={helpTriggerRef}
             type="button"
@@ -741,12 +879,29 @@ export function BlumAgent() {
             <CircleHelp aria-hidden="true" size={17} />
           </button>
           <button
+            aria-label={`${copy.language}: ${locale === "zh" ? copy.english : copy.chinese}`}
+            className="language-button"
+            onClick={() => setLocale((current) => current === "zh" ? "en" : "zh")}
+            type="button"
+          >
+            {locale === "zh" ? "EN" : "中"}
+          </button>
+          <button
+            aria-expanded={!isRolePanelCollapsed}
+            aria-label={isRolePanelCollapsed ? "Show role panel" : "Hide role panel"}
+            className="role-panel-toggle"
+            onClick={() => setIsRolePanelCollapsed((current) => !current)}
+            type="button"
+          >
+            {isRolePanelCollapsed ? "☰" : "×"}
+          </button>
+          <button
             className="new-chat-button"
             onClick={startNewConversation}
             type="button"
           >
             <RefreshCcw aria-hidden="true" size={15} />
-            开始新对话
+            {copy.newConversation}
           </button>
           <button
             className="export-chat-button"
@@ -754,29 +909,35 @@ export function BlumAgent() {
             onClick={() => void exportConversation()}
             type="button"
           >
-            导出对话
+            {copy.exportConversation}
           </button>
-          <div className="system-status" aria-label={connectionState === "online" ? "系统在线" : "正在重新连接"}>
+          <div className="system-status" aria-label={connectionState === "online" ? copy.online : copy.reconnecting}>
             <span className="status-dot" aria-hidden="true" />
-            {connectionState === "online" ? "官方资料优先" : "正在重新连接"}
+            {connectionState === "online" ? copy.officialFirst : copy.reconnecting}
           </div>
         </div>
       </header>
 
-      <div className="workspace">
-        <aside className="role-panel" aria-label="角色与产品导航">
+      <div className={`workspace${isRolePanelCollapsed ? " role-panel-collapsed" : ""}`}>
+        <RegionBoundary>
+        <aside className="role-panel" aria-label={`${copy.chooseRole} & ${copy.productMap}`}>
           <section>
             <div className="section-label">
               <span>01</span>
-              选择你的角色
+              {copy.chooseRole}
             </div>
-            <div aria-label="选择你的角色" className="role-list" role="group">
+            <div
+              aria-label={copy.chooseRole}
+              className="role-list"
+              role="group"
+              style={{ "--role-index": String(ROLES.findIndex((role) => role.id === roleId)) } as CSSProperties}
+            >
               {ROLES.map((role) => {
                 const Icon = roleIcons[role.id];
                 const selected = role.id === roleId;
                 return (
                   <button
-                    aria-label={`切换至${role.label}角色`}
+                    aria-label={locale === "en" ? `Switch to ${englishRoleLabels[role.id]}` : `切换至${role.label}角色`}
                     aria-pressed={selected}
                     className="role-button"
                     key={role.id}
@@ -788,7 +949,7 @@ export function BlumAgent() {
                   >
                     <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
                     <span>
-                      <strong>{role.label}</strong>
+                      <strong>{locale === "en" ? englishRoleLabels[role.id] : role.label}</strong>
                       <small>{role.eyebrow}</small>
                     </span>
                     <ChevronRight aria-hidden="true" size={16} />
@@ -801,7 +962,7 @@ export function BlumAgent() {
           <section className="product-index">
             <div className="section-label">
               <span>02</span>
-              产品知识地图
+              {copy.productMap}
             </div>
             <div className="product-list">
               {productGroups.map((product) => (
@@ -816,8 +977,10 @@ export function BlumAgent() {
             </div>
           </section>
         </aside>
+        </RegionBoundary>
 
-        <section className="conversation-panel" aria-label="Blum Agent 对话">
+        <RegionBoundary>
+        <section className="conversation-panel" aria-label={`${copy.appName} ${locale === "en" ? "conversation" : "对话"}`}>
           <div
             aria-busy={isLoading}
             className="conversation-scroll"
@@ -825,7 +988,7 @@ export function BlumAgent() {
             aria-label="与 Blum Agent 的对话记录"
             ref={conversationRef}
           >
-            {messages.length === 0 ? (
+                {messages.length === 0 ? (
               <div className="welcome">
                 <div className="welcome-kicker">
                   <span>BLUM / KNOWLEDGE SYSTEM</span>
@@ -884,8 +1047,8 @@ export function BlumAgent() {
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="timeline">
+                ) : (
+                  <div className="timeline">
                 {messages.length > MAX_VISIBLE_MESSAGES ? (
                   <button
                     aria-expanded={showOlderHistory}
@@ -903,7 +1066,7 @@ export function BlumAgent() {
                     <article className="message message-user" key={message.id}>
                       <div className="message-author">
                         <CircleUserRound aria-hidden="true" size={17} />
-                        你的问题
+                        {copy.question}
                         <time dateTime={new Date(message.createdAt ?? Date.now()).toISOString()}>
                           {formatMessageTime(message.createdAt)}
                         </time>
@@ -912,7 +1075,7 @@ export function BlumAgent() {
                     </article>
                   ) : (
                     <article
-                      className="message message-assistant"
+                      className={`message message-assistant${isStreamingRef.current && message.id === streamingMessageIdRef.current ? " message-streaming" : ""}`}
                       key={message.id}
                     >
                       <div className="answer-heading">
@@ -926,18 +1089,23 @@ export function BlumAgent() {
                           <span
                             className={`confidence confidence-${message.confidence}`}
                           >
-                            {confidenceLabels[message.confidence]}
+                            {locale === "en" ? ({ verified: "Verified source", guided: "Source guided", "needs-review": "Review before ordering / machining" } as Record<ConfidenceLevel, string>)[message.confidence] : confidenceLabels[message.confidence]}
                           </span>
                         ) : null}
                       </div>
-                      <p className="answer-text" id={`answer-content-${message.id}`}>
-                        {message.content.length > 500 && !expandedMessageIds.has(message.id)
-                          ? `${message.content.slice(0, 500)}…`
-                          : message.content}
-                        {isStreamingRef.current && message.id === streamingMessageIdRef.current ? (
-                          <span className="streaming-cursor" aria-hidden="true">_</span>
-                        ) : null}
-                      </p>
+                      <div className={`answer-content-wrap${expandedMessageIds.has(message.id) ? " is-expanded" : ""}`}>
+                        <p
+                          className={`answer-text${isStreamingRef.current && message.id === streamingMessageIdRef.current ? " answer-text-streaming" : ""}`}
+                          id={`answer-content-${message.id}`}
+                        >
+                          {message.content.length > 500 && !expandedMessageIds.has(message.id)
+                            ? `${message.content.slice(0, 500)}…`
+                            : message.content}
+                          {isStreamingRef.current && message.id === streamingMessageIdRef.current ? (
+                            <span className="streaming-cursor" aria-hidden="true">_</span>
+                          ) : null}
+                        </p>
+                      </div>
                       {message.content.length > 500 ? (
                         <button
                           aria-controls={`answer-content-${message.id}`}
@@ -969,7 +1137,10 @@ export function BlumAgent() {
                         return (
                           <div className="answer-feedback" aria-label="回答反馈">
                             {feedback?.status === "submitted" ? (
-                              <p role="status">感谢反馈，我们会持续改进</p>
+                              <p className="feedback-success" role="status">
+                                <CheckCircle2 aria-hidden="true" size={15} />
+                                感谢反馈，我们会持续改进
+                              </p>
                             ) : (
                               <>
                                 <span>这条回答有帮助吗？</span>
@@ -1019,7 +1190,7 @@ export function BlumAgent() {
                       })() : null}
                       {message.sources?.length ? (
                         <div className="source-section">
-                          <h2>参考的官方资料</h2>
+                          <h2>{copy.sources}</h2>
                           <div className="source-grid">
                             {message.sources.map((source) => (
                               <div className="source-card" key={source.id}>
@@ -1047,7 +1218,7 @@ export function BlumAgent() {
                       ) : null}
                       {message.followUps?.length ? (
                         <div className="follow-ups">
-                          <h2>继续把问题说清楚</h2>
+                          <h2>{copy.followUps}</h2>
                           {message.followUps.map((followUp) => (
                             <button
                               key={followUp}
@@ -1067,9 +1238,10 @@ export function BlumAgent() {
                     <LoaderCircle aria-hidden="true" size={17} />
                     <span className="thinking-text">
                       {connectionState === "reconnecting"
-                        ? "正在重新连接..."
-                        : "正在检索 Blum 资料并组织答案"}
+                        ? `${copy.reconnecting}...`
+                        : requestStageLabels[requestStage]}
                     </span>
+                    {hasLongWait ? <small className="thinking-estimate">预计还需片刻，正在继续处理。</small> : null}
                     <span className="thinking-dots" aria-hidden="true" />
                   </div>
                 ) : null}
@@ -1101,6 +1273,10 @@ export function BlumAgent() {
                 <Image
                   alt={`待发送图片：${attachment.name}`}
                   height={30}
+                  onError={() => {
+                    setAttachment(null);
+                    setError(IMAGE_READ_ERROR_MESSAGE);
+                  }}
                   src={attachment.dataUrl}
                   unoptimized
                   width={30}
@@ -1138,7 +1314,7 @@ export function BlumAgent() {
                     if (draft.trim()) void submitQuestion();
                   }
                 }}
-                placeholder={`以${selectedRole.label}身份提问：产品、选型、安装、采购…`}
+                placeholder={formatMessage(copy.placeholder, { role: selectedRoleLabel })}
                 ref={inputRef}
                 rows={2}
                 value={draft}
@@ -1148,7 +1324,7 @@ export function BlumAgent() {
                   className={`attach-button${isUploading ? " uploading" : ""}`}
                 >
                   <ImagePlus aria-hidden="true" size={18} />
-                  <span>添加现场图片</span>
+                  <span>{copy.attachImage}</span>
                   <input
                     accept="image/jpeg,image/png,image/webp"
                     disabled={isUploading || isLoading}
@@ -1162,10 +1338,10 @@ export function BlumAgent() {
                 <button
                   className="send-button"
                   disabled={isLoading || !draft.trim()}
-                  aria-label={isLoading ? "正在发送问题" : "发送问题"}
+                  aria-label={isLoading ? copy.sending : copy.send}
                   type="submit"
                 >
-                  <span>发送问题</span>
+                  <span>{copy.send}</span>
                   {isLoading ? (
                     <LoaderCircle aria-hidden="true" size={17} />
                   ) : (
@@ -1186,6 +1362,7 @@ export function BlumAgent() {
             </div>
           </div>
         </section>
+        </RegionBoundary>
       </div>
     </main>
   );

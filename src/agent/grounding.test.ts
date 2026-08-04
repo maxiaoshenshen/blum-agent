@@ -96,4 +96,22 @@ describe("deterministic model grounding gate", () => {
     expect(grounded).not.toBeUndefined();
     expect(grounded).not.toContain("避免夹手");
   });
+
+  it("rejects a claim whose professional term is absent from the official source", () => {
+    expect(
+      isGroundedModelAnswer(
+        "MERIVOBOX 使用磁悬浮导轨，运行时无需机械支撑。",
+        [merivoboxSource],
+      ),
+    ).toBe(false);
+  });
+
+  it("does not retain a dependent conclusion after its premise is ungrounded", () => {
+    const grounded = groundModelAnswer(
+      "MERIVOBOX 配有磁悬浮导轨。因此，它无需机械支撑。",
+      [merivoboxSource],
+    );
+
+    expect(grounded).toBeUndefined();
+  });
 });

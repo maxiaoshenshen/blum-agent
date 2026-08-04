@@ -51,10 +51,11 @@ describe("POST /api/chat", () => {
     expect(body.sources[0].id).toBe("aventos-hf");
   });
 
-  it("records anonymous request dimensions and response duration without logging question text", async () => {
+  it("records structured anonymous success analytics in development without logging question text", async () => {
     vi.stubEnv("PROVIDER_BASE_URL", "");
     vi.stubEnv("PROVIDER_API_KEY", "");
     vi.stubEnv("PROVIDER_MODEL", "");
+    vi.stubEnv("NODE_ENV", "development");
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     await post({
@@ -64,18 +65,43 @@ describe("POST /api/chat", () => {
 
     const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
     expect(events).toContainEqual(expect.objectContaining({
-      type: "chat_request",
+      event: "blum_agent.chat.completed",
       role: "installer",
-      risk: "standard",
-      hasImage: false,
-      matchCount: expect.any(Number),
+      question_length: expect.any(Number),
+      has_image: false,
+      risk_level: "standard",
+      retrieval_matches: expect.any(Number),
+      model_provider_used: false,
+      mode: "demo",
+      confidence: expect.any(String),
+      response_time_ms: expect.any(Number),
+      retrieval_time_ms: expect.any(Number),
+      model_response_time_ms: expect.any(Number),
+      sources_count: expect.any(Number),
+      followups_count: expect.any(Number),
+      quality: {
+        is_guarded: false,
+        is_demo: true,
+        grounding_intercepted: false,
+      },
       timestamp: expect.any(String),
     }));
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "chat_response_time_ms",
-      duration: expect.any(Number),
-    }));
     expect(log.mock.calls.flat().join(" ")).not.toContain("MERIVOBOX 安装要注意什么？");
+  });
+
+  it("records validation errors by anonymous error type in development", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await post({ role: "designer", messages: [{ role: "user", content: "" }] });
+
+    const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
+    expect(events).toContainEqual(expect.objectContaining({
+      event: "blum_agent.chat.failed",
+      error_type: "validation",
+      response_time_ms: expect.any(Number),
+      timestamp: expect.any(String),
+    }));
   });
 
   it("rejects malformed JSON without leaking implementation details", async () => {

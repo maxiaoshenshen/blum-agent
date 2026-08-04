@@ -50,4 +50,26 @@ describe("Blum Agent system prompt", () => {
     expect(prompt).toContain("这个问题超出了当前知识范围");
     expect(prompt).toContain("通用角度");
   });
+
+  it.each([
+    ["designer", "结构化、技术参数化、图纸友好"],
+    ["sales", "卖点清晰、对比简洁、成交导向"],
+    ["installer", "步骤明确、工具清单、故障导向"],
+    ["production", "工艺参数、误差范围、流程规范"],
+    ["procurement", "规格精准、交期明确、成本可控"],
+    ["consumer", "易懂、不需要专业术语、安全第一"],
+  ] as const)("adapts output style for %s", (roleId, style) => {
+    const prompt = buildSystemPrompt({
+      role: getRole(roleId),
+      matches: retrieveKnowledge("MERIVOBOX 是什么产品？"),
+      risk: "standard",
+    });
+
+    expect(prompt).toContain(style);
+    expect(prompt).toContain("结论 → 判断依据 → 建议");
+    expect(prompt).toContain("步骤 → 工具 → 注意事项 → 验证方法");
+    expect(prompt).toContain("方案 → 参数 → 参考链接 → 待确认");
+    expect(prompt).toContain("根据现有资料");
+    expect(prompt).toContain("以下信息待确认");
+  });
 });

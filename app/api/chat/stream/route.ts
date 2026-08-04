@@ -9,6 +9,11 @@ import { getRole } from "@/src/domain/roles";
 import { retrieveKnowledge, classifyRisk } from "@/src/domain/retrieval";
 import type { OfficialSource } from "@/src/domain/types";
 import { ProviderError } from "@/src/agent/provider";
+import { resolveLocale } from "@/src/i18n/messages";
+import {
+  recordChatCompletion,
+  recordChatFailure,
+} from "@/src/observability/chat-analytics";
 
 const API_RESPONSE_HEADERS = {
   "Cache-Control": "no-store, max-age=0",
@@ -77,7 +82,7 @@ function sse(key: string, data: unknown): string {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const start = Date.now();
+  const startTime = Date.now();
   const clientIp =
     request.headers.get("cf-connecting-ip") ??
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -85,6 +90,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const decision = globalRateLimiter.attempt(clientIp);
   if (!decision.allowed) {
+    recordChatFailure("rate_limit", Date.now() - startTime);
     return new Response(
       sse("error", { code: "rate_limited", message: "请求过于频繁，请稍后重试。" }),
       { status: 429, headers: { ...API_RESPONSE_HEADERS, "Retry-After": String(decision.retryAfterSeconds) } },
@@ -96,11 +102,13 @@ export async function POST(request: Request): Promise<Response> {
     body = await readJsonBody(request);
   } catch (error) {
     if (error instanceof BodyReadError) {
+      recordChatFailure("validation", Date.now() - startTime);
       return new Response(
         sse("error", { code: error.code, message: error.message }),
         { status: error.status, headers: API_RESPONSE_HEADERS },
       );
     }
+    recordChatFailure("validation", Date.now() - startTime);
     return new Response(
       sse("error", { code: "invalid_json", message: "请求内容不是有效的 JSON。" }),
       { status: 400, headers: API_RESPONSE_HEADERS },
@@ -112,11 +120,13 @@ export async function POST(request: Request): Promise<Response> {
     parsed = parseChatRequest(body);
   } catch (error) {
     if (error instanceof ValidationError) {
+      recordChatFailure("validation", Date.now() - startTime);
       return new Response(
         sse("error", { code: error.code, message: error.message }),
         { status: 400, headers: API_RESPONSE_HEADERS },
       );
     }
+    recordChatFailure("unknown", Date.now() - startTime);
     return new Response(
       sse("error", { code: "internal_error", message: "请求解析失败。" }),
       { status: 500, headers: API_RESPONSE_HEADERS },
@@ -125,6 +135,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const config = providerConfigFromEnvironment();
   if (!config) {
+    recordChatFailure("provider", Date.now() - startTime);
     return new Response(
       sse("error", { code: "no_config", message: "模型服务未配置。" }),
       { status: 503, headers: API_RESPONSE_HEADERS },
@@ -134,7 +145,9 @@ export async function POST(request: Request): Promise<Response> {
   const question = [...parsed.messages]
     .reverse()
     .find((m) => m.role === "user")!.content;
+  const retrievalStartedAt = Date.now();
   const matches = retrieveKnowledge(question);
+  const retrievalTimeMs = Date.now() - retrievalStartedAt;
   const hasDirectKnowledgeMatch = matches.some(
     (match) =>
       match.score > 0 &&
@@ -145,14 +158,6 @@ export async function POST(request: Request): Promise<Response> {
       ),
   );
   const risk = classifyRisk(question);
-  console.log(JSON.stringify({
-    type: "chat_request",
-    role: parsed.role,
-    risk,
-    hasImage: Boolean(parsed.image),
-    matchCount: matches.length,
-    timestamp: new Date().toISOString(),
-  }));
   const role = getRole(parsed.role);
   const systemPrompt = buildSystemPrompt({
     role,
@@ -160,6 +165,7 @@ export async function POST(request: Request): Promise<Response> {
     risk,
     conversationHistory: parsed.messages,
     knowledgeCoverage: hasDirectKnowledgeMatch ? "direct" : "none",
+    locale: resolveLocale(question, request.headers.get("accept-language")),
   });
   const sources = matches.map(({ source }: { source: OfficialSource }) => ({
     id: source.id,
@@ -188,10 +194,6 @@ export async function POST(request: Request): Promise<Response> {
         clearTimeout(timeout);
         clearInterval(heartbeat);
         request.signal.removeEventListener("abort", abortUpstream);
-        console.log(JSON.stringify({
-          type: "chat_response_time_ms",
-          duration: Date.now() - start,
-        }));
         try { controller.close(); } catch { /* client may have disconnected */ }
       };
       const send = (key: string, data: unknown) => {
@@ -213,6 +215,7 @@ export async function POST(request: Request): Promise<Response> {
 
       send("start", { sources });
       void (async () => {
+        const modelStartedAt = Date.now();
         try {
           let fullText = "";
           const finalAnswer = await requestChatCompletion(
@@ -230,17 +233,43 @@ export async function POST(request: Request): Promise<Response> {
             },
           );
           if (cancelled) return;
+          const confidence = risk === "precision" ? "needs-review" : "guided";
+          const followUps = risk === "precision"
+            ? ["补充完整产品编号与所在市场", "提供柜体、面板和应用场景参数", "用官方配置器或当前订购手册做最终复核"]
+            : ["提供柜体尺寸、门型和期望开合方式", "说明空间、风格与收纳目标"];
+          recordChatCompletion({
+            role: parsed.role,
+            question_length: question.length,
+            has_image: Boolean(parsed.image),
+            risk_level: risk,
+            retrieval_matches: matches.length,
+            model_provider_used: Boolean(config),
+            mode: "live",
+            confidence,
+            response_time_ms: Date.now() - startTime,
+            retrieval_time_ms: retrievalTimeMs,
+            model_response_time_ms: Date.now() - modelStartedAt,
+            sources_count: sources.length,
+            followups_count: followUps.length,
+            quality: {
+              is_guarded: false,
+              is_demo: false,
+              grounding_intercepted: false,
+            },
+          });
           send("done", {
             answer: finalAnswer,
-            confidence: risk === "precision" ? "needs-review" : "guided",
-            followUps: risk === "precision"
-              ? ["补充完整产品编号与所在市场", "提供柜体、面板和应用场景参数", "用官方配置器或当前订购手册做最终复核"]
-              : ["提供柜体尺寸、门型和期望开合方式", "说明空间、风格与收纳目标"],
+            confidence,
+            followUps,
             sources,
           });
         } catch (error) {
           if (!cancelled) {
             const providerError = error instanceof ProviderError ? error : undefined;
+            recordChatFailure(
+              providerError ? "provider" : "unknown",
+              Date.now() - startTime,
+            );
             send("error", {
               code: providerError?.code ?? "internal_error",
               message: providerError?.message ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。",

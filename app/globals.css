@@ -181,6 +181,32 @@ label:focus-within {
   gap: 18px;
 }
 
+.language-button,
+.role-panel-toggle {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.language-button:hover,
+.role-panel-toggle:hover {
+  border-color: var(--signal);
+  color: var(--signal-dark);
+}
+
+.role-panel-toggle {
+  display: none;
+}
+
 .new-chat-button {
   display: inline-flex;
   min-height: 36px;
@@ -968,6 +994,22 @@ label:focus-within {
   gap: 9px;
 }
 
+.thinking-estimate {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.section-error,
+.app-error {
+  display: grid;
+  min-height: 5rem;
+  place-items: center;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
 .thinking svg,
 .send-button:disabled svg {
   animation: spin 0.9s linear infinite;
@@ -1248,6 +1290,54 @@ label:focus-within {
   }
 }
 
+/* Tablet: retain two working columns while allowing the navigation rail to fold. */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .role-panel-toggle {
+    display: inline-grid;
+  }
+
+  .workspace {
+    transition: grid-template-columns 180ms ease;
+  }
+
+  .workspace.role-panel-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  .workspace.role-panel-collapsed .role-panel {
+    padding-right: 0;
+    padding-left: 0;
+    overflow: hidden;
+    border-right-width: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .workspace.role-panel-collapsed .role-panel > * {
+    width: 214px;
+  }
+
+  .timeline {
+    padding-right: clamp(28px, 5vw, 54px);
+    padding-left: clamp(28px, 5vw, 54px);
+  }
+
+  .source-grid,
+  .starter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Large workspaces get a deliberate 1200px reading frame instead of an endless line length. */
+@media (min-width: 1440px) {
+  .workspace {
+    max-width: 1200px;
+    margin: 0 auto;
+    border-right: 1px solid var(--ink);
+    border-left: 1px solid var(--ink);
+  }
+}
+
 @media (max-width: 760px) {
   .topbar {
     height: 64px;
@@ -1269,6 +1359,15 @@ label:focus-within {
 
   .topbar-actions {
     gap: 10px;
+  }
+
+  .language-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .role-panel-toggle {
+    display: none;
   }
 
   .new-chat-button {
@@ -1429,6 +1528,32 @@ label:focus-within {
 
 .composer-meta > span:last-child {
     display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .agent-shell.keyboard-open .workspace {
+    height: calc(var(--agent-visual-height, 100dvh) - 64px);
+  }
+
+  .agent-shell.keyboard-open .role-panel {
+    display: none;
+  }
+
+  .agent-shell.keyboard-open .workspace {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .agent-shell.keyboard-open .composer-wrap {
+    padding-bottom: max(9px, env(safe-area-inset-bottom));
+  }
+
+  .message-user {
+    width: min(92%, 620px);
+  }
+
+  .message-assistant {
+    padding: 18px 15px;
   }
 }
 
@@ -1605,13 +1730,200 @@ label:focus-within {
   box-shadow: -12px 0 48px rgba(25, 26, 23, 0.18);
   display: flex;
   flex-direction: column;
-  animation: help-panel-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: help-panel-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
   overflow: hidden;
 }
 
 @keyframes help-panel-in {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
+}
+
+/* Motion system: opacity and transforms keep these interactions on the compositor. */
+.message {
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+.message-assistant {
+  animation-name: message-enter-assistant;
+}
+
+.message-user {
+  animation-name: message-enter-user;
+}
+
+@keyframes message-enter-assistant {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes message-enter-user {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.role-list {
+  position: relative;
+}
+
+.role-list::before {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: -1px;
+  width: 3px;
+  height: 60px;
+  background: var(--signal);
+  content: "";
+  pointer-events: none;
+  transform: translateY(calc(var(--role-index, 0) * 60px));
+  transition: transform 200ms ease;
+  will-change: transform;
+}
+
+.role-button {
+  transition:
+    transform 100ms ease,
+    background 100ms ease,
+    color 100ms ease,
+    padding 100ms ease;
+}
+
+.role-button:hover:not(:disabled),
+.help-button:hover,
+.new-chat-button:hover,
+.export-chat-button:hover:not(:disabled),
+.quick-question:hover,
+.starter-grid button:hover,
+.history-toggle:hover,
+.follow-ups button:hover,
+.feedback-actions button:hover,
+.feedback-form > button:hover:not(:disabled),
+.retry-button:hover,
+.attach-button:hover,
+.send-button:hover:not(:disabled) {
+  transform: scale(1.015);
+}
+
+.role-button:active:not(:disabled),
+.help-button:active,
+.new-chat-button:active,
+.export-chat-button:active:not(:disabled),
+.quick-question:active,
+.starter-grid button:active,
+.history-toggle:active,
+.follow-ups button:active,
+.feedback-actions button:active,
+.feedback-form > button:active:not(:disabled),
+.retry-button:active,
+.attach-button:active,
+.send-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.send-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  will-change: transform;
+}
+
+.send-button::after {
+  position: absolute;
+  z-index: -1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0);
+}
+
+.send-button:active:not(:disabled)::after {
+  animation: send-ripple 300ms ease-out both;
+}
+
+@keyframes send-ripple {
+  0% { opacity: 0.8; transform: scale(0); }
+  100% { opacity: 0; transform: scale(15); }
+}
+
+.thinking {
+  animation: retrieval-pulse 300ms ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+
+@keyframes retrieval-pulse {
+  from { opacity: 0.72; transform: translateY(1px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.send-button:disabled[aria-label="正在发送问题"] {
+  animation: disabled-button-pulse 300ms ease-in-out infinite alternate;
+  will-change: opacity;
+}
+
+@keyframes disabled-button-pulse {
+  from { opacity: 0.72; }
+  to { opacity: 1; }
+}
+
+.answer-content-wrap {
+  overflow: hidden;
+  max-height: 26em;
+  transition: max-height 300ms ease-in-out;
+}
+
+.answer-content-wrap.is-expanded {
+  max-height: 180em;
+}
+
+.feedback-error,
+.error-banner {
+  animation: error-shake 300ms ease-in-out both;
+  will-change: transform;
+}
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.feedback-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.feedback-success svg {
+  animation: checkmark-pop 240ms cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes checkmark-pop {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.help-overlay-backdrop.is-closing {
+  animation: help-backdrop-out 200ms ease both;
+}
+
+.help-overlay-backdrop.is-closing .help-overlay-panel {
+  animation: help-panel-out 200ms ease both;
+}
+
+@keyframes help-backdrop-out {
+  to { opacity: 0; }
+}
+
+@keyframes help-panel-out {
+  to { opacity: 0; transform: translateX(100%); }
 }
 
 .help-overlay-header {
@@ -1761,5 +2073,9 @@ kbd + kbd {
 
   .help-overlay-panel {
     width: 100vw;
+  }
+
+  .role-list::before {
+    display: none;
   }
 }

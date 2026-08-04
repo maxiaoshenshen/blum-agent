@@ -6,6 +6,11 @@ import { ProviderError } from "@/src/agent/provider";
 import { parseChatRequest, ValidationError } from "@/src/agent/schema";
 import { FixedWindowRateLimiter } from "@/src/security/rate-limit";
 import { classifyRisk, retrieveKnowledge } from "@/src/domain/retrieval";
+import { resolveLocale } from "@/src/i18n/messages";
+import {
+  recordChatCompletion,
+  recordChatFailure,
+} from "@/src/observability/chat-analytics";
 
 const MAX_REQUEST_BYTES = 7_500_000;
 const API_RESPONSE_HEADERS = {
@@ -98,7 +103,7 @@ async function readJsonBody(request: Request): Promise<unknown> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const start = Date.now();
+  const startTime = Date.now();
   // 从请求头获取真实IP（支持 CloudFlare 等代理）
   const clientIp =
     request.headers.get("cf-connecting-ip") ??
@@ -108,6 +113,7 @@ export async function POST(request: Request): Promise<Response> {
   // 限流检查
   const decision = globalRateLimiter.attempt(clientIp);
   if (!decision.allowed) {
+    recordChatFailure("rate_limit", Date.now() - startTime);
     return Response.json(
       {
         error: {
@@ -133,8 +139,10 @@ export async function POST(request: Request): Promise<Response> {
     body = await readJsonBody(request);
   } catch (error) {
     if (error instanceof BodyReadError) {
+      recordChatFailure("validation", Date.now() - startTime);
       return errorResponse(error.code, error.message, error.status);
     }
+    recordChatFailure("validation", Date.now() - startTime);
     return errorResponse("invalid_json", "请求内容不是有效的 JSON。", 400);
   }
 
@@ -143,33 +151,58 @@ export async function POST(request: Request): Promise<Response> {
     const question = [...parsed.messages]
       .reverse()
       .find((message) => message.role === "user")!.content;
+    const retrievalStartedAt = Date.now();
     const matches = retrieveKnowledge(question);
-    console.log(JSON.stringify({
-      type: "chat_request",
-      role: parsed.role,
-      risk: classifyRisk(question),
-      hasImage: Boolean(parsed.image),
-      matchCount: matches.length,
-      timestamp: new Date().toISOString(),
-    }));
+    const retrievalTimeMs = Date.now() - retrievalStartedAt;
+    const risk = classifyRisk(question);
+    const providerConfig = providerConfigFromEnvironment();
+    let modelStartedAt: number | undefined;
+    let groundingIntercepted = false;
     const answer = await answerChat(parsed, {
-      providerConfig: providerConfigFromEnvironment(),
+      providerConfig,
+      locale: resolveLocale(question, request.headers.get("accept-language")),
+      onModelRequest: () => {
+        modelStartedAt = Date.now();
+      },
+      onGroundingIntercept: () => {
+        groundingIntercepted = true;
+      },
+    });
+    recordChatCompletion({
+      role: parsed.role,
+      question_length: question.length,
+      has_image: Boolean(parsed.image),
+      risk_level: risk,
+      retrieval_matches: matches.length,
+      model_provider_used: Boolean(providerConfig),
+      mode: answer.mode,
+      confidence: answer.confidence,
+      response_time_ms: Date.now() - startTime,
+      retrieval_time_ms: retrievalTimeMs,
+      model_response_time_ms: modelStartedAt ? Date.now() - modelStartedAt : 0,
+      sources_count: answer.sources.length,
+      followups_count: answer.followUps.length,
+      quality: {
+        is_guarded: answer.mode === "guarded",
+        is_demo: answer.mode === "demo",
+        grounding_intercepted: groundingIntercepted,
+      },
     });
     return jsonResponse(answer);
   } catch (error) {
     if (error instanceof ValidationError || error instanceof ProviderError) {
+      recordChatFailure(
+        error instanceof ProviderError ? "provider" : "validation",
+        Date.now() - startTime,
+      );
       return errorResponse(error.code, error.message, error.status);
     }
 
+    recordChatFailure("unknown", Date.now() - startTime);
     return errorResponse(
       "internal_error",
       "Blum Agent 暂时无法处理这个问题，请稍后重试。",
       500,
     );
-  } finally {
-    console.log(JSON.stringify({
-      type: "chat_response_time_ms",
-      duration: Date.now() - start,
-    }));
   }
 }

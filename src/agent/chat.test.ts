@@ -188,13 +188,13 @@ describe("Blum chat orchestration", () => {
     expect(requestCompletion).not.toHaveBeenCalled();
   });
 
-  it("adds a Chinese-language hint for non-Chinese Blum questions", async () => {
+  it("does not append a Chinese-language hint to a non-Chinese Blum question", async () => {
     const response = await answerChat(
       { role: "consumer", messages: [{ role: "user", content: "What is MERIVOBOX?" }] },
       {},
     );
 
-    expect(response.answer).toContain("建议用中文提问");
+    expect(response.answer).not.toContain("建议用中文提问");
   });
 
   it("keeps prior turns in the system conversation brief for a product follow-up", async () => {
@@ -216,17 +216,46 @@ describe("Blum chat orchestration", () => {
     );
   });
 
-  it("instructs the model to disclose a missing direct knowledge match", async () => {
+  it("downgrades a missing direct knowledge match to official entry points", async () => {
     const requestCompletion = vi.fn(async (_request: unknown) => "这个问题超出了当前知识范围，但我可以尝试从通用角度回答。请提供产品标识。");
     await answerChat(
       { role: "consumer", messages: [{ role: "user", content: "Blum 的月球柜门应该怎样维护？" }] },
       { providerConfig: { apiKey: "test-secret", baseUrl: "https://provider.example", model: "claude-opus-5" }, requestCompletion },
     );
 
-    expect(requestCompletion).toHaveBeenCalledOnce();
-    expect((requestCompletion.mock.calls[0]?.[0] as { systemPrompt: string } | undefined)?.systemPrompt).toContain(
-      "当前检索没有找到与问题直接匹配的官方资料",
+    expect(requestCompletion).not.toHaveBeenCalled();
+  });
+
+  it("uses verified confidence for an exact official product match", async () => {
+    const response = await answerChat(merivoboxRequest, {
+      providerConfig: {
+        apiKey: "test-secret",
+        baseUrl: "https://provider.example",
+        model: "claude-opus-5",
+      },
+      requestCompletion: vi.fn(async () => "MERIVOBOX 是 Blum 金属抽屉系统 MERIVOBOX 系列。"),
+    });
+
+    expect(response.confidence).toBe("verified");
+  });
+
+  it("limits a missing direct match to official-source entry points", async () => {
+    const response = await answerChat(
+      { role: "consumer", messages: [{ role: "user", content: "Blum 的月球柜门应该怎样维护？" }] },
+      {
+        providerConfig: {
+          apiKey: "test-secret",
+          baseUrl: "https://provider.example",
+          model: "claude-opus-5",
+        },
+        requestCompletion: vi.fn(async () => "不应调用模型。"),
+      },
     );
+
+    expect(response.mode).toBe("guarded");
+    expect(response.confidence).toBe("needs-review");
+    expect(response.answer).toContain("根据现有资料");
+    expect(response.answer).not.toContain("不应调用模型");
   });
 });
 

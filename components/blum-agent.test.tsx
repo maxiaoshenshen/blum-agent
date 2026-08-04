@@ -229,6 +229,49 @@ describe("Blum Agent workspace", () => {
     }
   });
 
+  it("removes an attachment and explains the problem when its preview cannot load", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    render(<BlumAgent />);
+
+    await user.upload(
+      screen.getByLabelText("添加现场图片"),
+      new File(["image"], "broken-preview.png", { type: "image/png" }),
+    );
+    const preview = await screen.findByRole("img", { name: "待发送图片：broken-preview.png" });
+    fireEvent.error(preview);
+
+    expect(screen.queryByRole("img", { name: "待发送图片：broken-preview.png" })).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("图片无法识别，请尝试重新上传或描述问题文字");
+  });
+
+  it("shows the retrieval stage while a response is being prepared", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "帮我选一套抽屉五金");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+
+    expect(await screen.findByText("正在检索 Blum 资料")).toBeInTheDocument();
+  });
+
+  it("handles an invalid fallback payload without crashing the conversation", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
+      if (String(input).includes("/chat/stream")) {
+        return Promise.reject(new TypeError("stream unavailable"));
+      }
+      return Promise.resolve(Response.json(null));
+    }));
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+
+    await user.type(screen.getByLabelText("向 Blum Agent 提问"), "测试异常响应");
+    await user.click(screen.getByRole("button", { name: "发送问题" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("暂时无法获得回答，请稍后重试。");
+    expect(screen.getByLabelText("向 Blum Agent 提问")).toHaveValue("测试异常响应");
+  });
+
   it("shows a recoverable API error", async () => {
     vi.stubGlobal("fetch", makeFetchMock("error"));
     const user = userEvent.setup();

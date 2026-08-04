@@ -56,7 +56,8 @@ describe("POST /api/chat/stream", () => {
     expect(text).toContain('"answer":"MERIVOBOX 是金属抽屉系统。"');
   });
 
-  it("records anonymous request dimensions and end-to-end response duration", async () => {
+  it("records structured anonymous stream analytics after the response finishes in development", async () => {
+    vi.stubEnv("NODE_ENV", "development");
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     requestChatCompletion.mockResolvedValue("已完成");
 
@@ -65,21 +66,33 @@ describe("POST /api/chat/stream", () => {
 
     const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
     expect(events).toContainEqual(expect.objectContaining({
-      type: "chat_request",
+      event: "blum_agent.chat.completed",
       role: "designer",
-      risk: "standard",
-      hasImage: false,
-      matchCount: expect.any(Number),
+      question_length: expect.any(Number),
+      has_image: false,
+      risk_level: "standard",
+      retrieval_matches: expect.any(Number),
+      model_provider_used: true,
+      mode: "live",
+      confidence: "guided",
+      response_time_ms: expect.any(Number),
+      retrieval_time_ms: expect.any(Number),
+      model_response_time_ms: expect.any(Number),
+      sources_count: expect.any(Number),
+      followups_count: expect.any(Number),
+      quality: {
+        is_guarded: false,
+        is_demo: false,
+        grounding_intercepted: false,
+      },
       timestamp: expect.any(String),
-    }));
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "chat_response_time_ms",
-      duration: expect.any(Number),
     }));
     expect(log.mock.calls.flat().join(" ")).not.toContain("MERIVOBOX 是什么产品？");
   });
 
   it("returns an SSE error when the provider times out", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     requestChatCompletion.mockRejectedValue(
       new ProviderError("timeout", "模型服务响应较慢，请稍后重试。", 504),
     );
@@ -91,6 +104,13 @@ describe("POST /api/chat/stream", () => {
     expect(text).toContain("event: start\n");
     expect(text).toContain("event: error\n");
     expect(text).toContain('"code":"timeout"');
+    const events = log.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
+    expect(events).toContainEqual(expect.objectContaining({
+      event: "blum_agent.chat.failed",
+      error_type: "provider",
+      response_time_ms: expect.any(Number),
+      timestamp: expect.any(String),
+    }));
   });
 
   it("returns 503 SSE when provider configuration is unavailable", async () => {

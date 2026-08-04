@@ -7,6 +7,9 @@ const sectionPrefixPattern =
   /^(?:结论|判断依据|操作步骤|下一步|还需确认|待确认问题|建议核实方式|实际体验改善(?:（[^）]*）)?|摘录原文|补充说明)\s*[：:]\s*/;
 const verificationGuidancePattern =
   /(?:需|需要|应|请|建议).*(?:官方|配置器|目录|资料|手册).*(?:确认|核实|复核|参考|查询|查看|查阅|使用)|(?:可以|建议|请|需|需要|应).*(?:查看|查阅|查询|参考|使用).*(?:官方|配置器|目录|资料|手册)|(?:具体|完整).*需要.*(?:官方|配置器|目录|资料|手册)|请查看官方资料|建议用配置器核实/u;
+const professionalTermPattern = /(?:磁悬浮|气压|激光|液压|无线|智能|电动)[\p{Script=Han}]{0,4}(?:导轨|铰链|阻尼|弹簧|杯孔|安装板|连接件|锁定装置|抽屉系统|上翻门|电机)/gu;
+const dependentClaimPattern = /^(?:因此|所以|故|由此|这意味着|从而|进而)[，,、]?/u;
+const semanticSimilarityThreshold = 0.58;
 
 function normalize(value: string): string {
   return value
@@ -34,6 +37,18 @@ function hanBigrams(value: string): string[] {
       (_, index) => run.slice(index, index + 2),
     );
   });
+}
+
+function semanticSimilarity(claim: string, context: string): number {
+  const bigrams = hanBigrams(normalize(claim));
+  if (bigrams.length === 0) return 1;
+  return bigrams.filter((bigram) => context.includes(bigram)).length / bigrams.length;
+}
+
+function hasUnsupportedProfessionalTerm(claim: string, context: string): boolean {
+  return [...claim.matchAll(professionalTermPattern)].some(([term]) =>
+    !context.includes(normalize(term)),
+  );
 }
 
 function claimChunks(answer: string): string[] {
@@ -67,6 +82,8 @@ function claimIsCovered(
   // if its punctuation/spacing differs from the stored source.
   if (context.includes(normalizedClaim)) return true;
 
+  if (hasUnsupportedProfessionalTerm(claim, context)) return false;
+
   for (const measurement of claim.match(measurementPattern) ?? []) {
     if (!context.includes(normalize(measurement))) return false;
   }
@@ -89,8 +106,7 @@ function claimIsCovered(
     return (claim.match(latinTermPattern) ?? []).length > 0;
   }
 
-  const covered = bigrams.filter((bigram) => context.includes(bigram)).length;
-  return covered / bigrams.length >= 0.58;
+  return semanticSimilarity(claim, context) >= semanticSimilarityThreshold;
 }
 
 export function isGroundedModelAnswer(
@@ -123,9 +139,15 @@ export function groundModelAnswer(
   const terms = sourceTerms(sources);
   if (claims.length === 0) return undefined;
 
-  const groundedClaims = claims.filter((claim) =>
-    claimIsCovered(claim, context, terms),
-  );
+  let hasUngroundedPremise = false;
+  const groundedClaims = claims.filter((claim) => {
+    const dependsOnUngroundedPremise =
+      hasUngroundedPremise && dependentClaimPattern.test(claim);
+    const isGrounded =
+      !dependsOnUngroundedPremise && claimIsCovered(claim, context, terms);
+    if (!isGrounded) hasUngroundedPremise = true;
+    return isGrounded;
+  });
   if (groundedClaims.length === 0) return undefined;
 
   if (groundedClaims.length === claims.length) return answer.trim();

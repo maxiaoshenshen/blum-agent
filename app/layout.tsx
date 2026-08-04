@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Noto_Sans_SC } from "next/font/google";
 import { publicSiteUrlFromEnvironment } from "@/src/security/site-url";
+import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 
 const notoSans = Noto_Sans_SC({
@@ -86,7 +87,11 @@ export default function RootLayout({
         <a className="skip-link" href="#workspace">
           跳转到主内容
         </a>
-        {children}
+        <ErrorBoundary
+          fallback={<div className="app-error" role="alert">出错了，请刷新页面重试。</div>}
+        >
+          {children}
+        </ErrorBoundary>
       </body>
     </html>
   );
