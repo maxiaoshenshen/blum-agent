@@ -202,6 +202,33 @@ describe("Blum Agent workspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("rejects an image that cannot be decoded", async () => {
+    const previousDecode = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype,
+      "decode",
+    );
+    Object.defineProperty(HTMLImageElement.prototype, "decode", {
+      configurable: true,
+      value: vi.fn().mockRejectedValue(new Error("corrupt image")),
+    });
+    const user = userEvent.setup({ applyAccept: false });
+    render(<BlumAgent />);
+
+    await user.upload(
+      screen.getByLabelText("添加现场图片"),
+      new File(["not an image"], "broken.webp", { type: "image/webp" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "图片无法识别，请尝试重新上传或描述问题文字",
+    );
+    if (previousDecode) {
+      Object.defineProperty(HTMLImageElement.prototype, "decode", previousDecode);
+    } else {
+      Reflect.deleteProperty(HTMLImageElement.prototype, "decode");
+    }
+  });
+
   it("shows a recoverable API error", async () => {
     vi.stubGlobal("fetch", makeFetchMock("error"));
     const user = userEvent.setup();

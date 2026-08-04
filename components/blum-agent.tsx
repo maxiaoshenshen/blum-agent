@@ -61,6 +61,7 @@ const REQUEST_TIMEOUT_MS = 60_000;
 const RECONNECT_DELAY_MS = 3_000;
 const TIMEOUT_MESSAGE = "这个问题比较复杂，模型正在深入分析，请稍后重试或简化问题";
 const IMAGE_READ_ERROR_MESSAGE = "图片无法识别，请尝试重新上传或描述问题文字";
+const IMAGE_TOO_SMALL_MESSAGE = "图片分辨率过低，请上传更清晰的现场照片。";
 const CONVERSATION_STORAGE_KEY = "blum-agent-conversations-v1";
 const MAX_SAVED_CONVERSATIONS = 5;
 const MAX_VISIBLE_MESSAGES = 20;
@@ -112,6 +113,23 @@ function isSafeImageDataUrl(value: string): boolean {
     value.length <= 7_000_000 &&
     /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i.test(value)
   );
+}
+
+async function validateImagePreview(dataUrl: string): Promise<void> {
+  const preview = new window.Image();
+  preview.src = dataUrl;
+
+  // `decode` is available in supported production browsers. Older browsers
+  // retain the server-side validation path instead of blocking uploads.
+  if (typeof preview.decode !== "function") return;
+  try {
+    await preview.decode();
+  } catch {
+    throw new Error(IMAGE_READ_ERROR_MESSAGE);
+  }
+  if (preview.naturalWidth < 16 || preview.naturalHeight < 16) {
+    throw new Error(IMAGE_TOO_SMALL_MESSAGE);
+  }
 }
 
 function readStoredConversations(): StoredConversation[] {
@@ -427,9 +445,21 @@ export function BlumAgent() {
         setError(IMAGE_READ_ERROR_MESSAGE);
         return;
       }
-      setIsUploading(false);
-      setAttachment({ dataUrl: reader.result, name: file.name });
-      setError("");
+      void validateImagePreview(reader.result)
+        .then(() => {
+          setIsUploading(false);
+          setAttachment({ dataUrl: reader.result as string, name: file.name });
+          setError("");
+        })
+        .catch((reason: unknown) => {
+          setIsUploading(false);
+          setAttachment(null);
+          setError(
+            reason instanceof Error && reason.message === IMAGE_TOO_SMALL_MESSAGE
+              ? IMAGE_TOO_SMALL_MESSAGE
+              : IMAGE_READ_ERROR_MESSAGE,
+          );
+        });
     });
     reader.addEventListener("error", () => {
       setIsUploading(false);

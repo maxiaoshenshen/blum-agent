@@ -1348,7 +1348,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "undermount-runner-installation",
     title: "隐藏式托底轨抽屉安装前提",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "MOVENTO/TANDEM 隐藏式托底轨要求抽屉底板、侧板厚度、后板缺口、锁定装置位置和柜体内宽与对应技术图一致。常见“拉不出、推不回、左右不同步”多数来自抽屉箱尺寸、锁定装置或柜体孔位错误，而非导轨本身故障。应使用 EASY ASSEMBLY 中该产品号的钻孔图与安装动画确认。",
     official: true,
     keywords: ["托底轨安装", "隐藏轨安装", "抽屉后板缺口", "锁定装置", "抽屉拉不出", "抽屉推不回", "undermount runner", "locking device", "安装尺寸"],
@@ -1428,7 +1428,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "revego-installation-preconditions",
     title: "REVEGO 安装前柜体与现场要求",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "REVEGO 对柜体方正度、侧袋空间、地面/柜体水平、前板尺寸和安装孔位要求较高。安装前应确认柜体已固定、对角线无明显偏差，并按产品号下载 EASY ASSEMBLY 的安装说明；完成机械调节后再安装饰面和调节门缝。强行在不方正柜体上调门通常会造成运行阻力或门缝失控。",
     official: true,
     keywords: ["REVEGO安装", "口袋门安装", "柜体方正", "门推不进去", "运行阻力", "安装孔位", "EASY ASSEMBLY", "pocket door installation"],
@@ -1436,7 +1436,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "revego-ordering-checklist",
     title: "REVEGO 订货配件清单核对",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "REVEGO 项目应以配置器输出的完整 BOM 订货，通常包含左右机构、导向/运行组件、前板连接件、同步或开门组件及与门型匹配的附件。左右件、uno/duo 和门厚相关部件不可凭名称混订；采购时保存配置项目号与 PDF 清单，售后补件才能准确追溯。",
     official: true,
     keywords: ["REVEGO配件", "REVEGO清单", "口袋门BOM", "左右件", "duo配件", "uno配件", "订货", "产品配置器"],
@@ -1444,7 +1444,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "hinge-adjustment-screws-guide",
     title: "CLIP top 调节螺丝位置与顺序",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "CLIP top 的高度通常在底座上调节，侧向（门缝）在铰链臂偏心调节处调节，深度在铰链臂/底座的对应螺丝处调节；不同铰链臂和底座结构会改变具体位置和调节范围。建议先松开/调高度，再调侧缝，最后调深度并复查开合，始终按产品号的安装说明操作。",
     official: true,
     keywords: ["铰链螺丝位置", "高度螺丝", "深度螺丝", "左右螺丝", "门缝不均", "铰链怎么调", "hinge adjustment", "side adjustment", "depth adjustment"],
@@ -1460,7 +1460,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "drawer-running-troubleshooting",
     title: "抽屉卡顿、不同步与回弹排查",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "抽屉卡顿先排除柜体内宽不一致、左右导轨非同型号/长度、锁定装置未卡到位、安装孔偏位和抽屉箱变形。带同步技术的系统还应检查同步件是否按图装齐。切勿通过弯折导轨或向阻尼机构喷油解决；应按产品号安装图复核并更换受损件。",
     official: true,
     keywords: ["抽屉卡", "抽屉异响", "抽屉不同步", "抽屉回弹", "导轨卡顿", "锁定装置没卡", "drawer stuck", "runner noise", "同步杆"],
@@ -1468,7 +1468,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "blum-installation-tools",
     title: "Blum 安装工具与钻孔辅助",
-    url: "https://www.blum.com/cn/zh/services/machines-and-assembly-devices/",
+    url: "https://www.blum.com/connects/zh/app/services",
     summary: "常规安装通常需要卷尺/直尺、角尺、水平尺、定位夹具、适配钻头、螺丝刀或扭矩可控电批。35 mm 杯铰链应配套杯孔钻与定位模板；批量生产宜采用 Blum MINIPRESS 等钻孔设备或经确认的模板。工具规格、钻孔深度和螺钉类型须按产品安装图，不应以单一工具清单替代工艺文件。",
     official: true,
     keywords: ["安装工具", "35mm开孔钻", "铰链定位器", "MINIPRESS", "钻孔模板", "电批", "安装夹具", "assembly tools", "boring machine"],
@@ -1476,7 +1476,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "blum-easy-assembly-videos",
     title: "Blum 官方 EASY ASSEMBLY 安装视频与图纸",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "EASY ASSEMBLY 是 Blum 官方装配服务入口，可按产品号查找安装信息、调节步骤、钻孔图和（产品提供时）安装动画/视频。现场人员应优先以产品号检索，而不是用系列名猜测：同一系列不同长度、承重、门型或市场版本的孔位和调节件可能不同。",
     official: true,
     keywords: ["Blum官方视频", "安装视频", "EASY ASSEMBLY", "安装图纸", "钻孔图", "产品号查询", "安装教程", "assembly video"],
@@ -1484,7 +1484,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "blum-product-number-reading",
     title: "Blum 产品编号识别与订货原则",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "Blum 产品号常由字母与数字组合，编码会体现系列、功能、版本、长度、承重、表面或左右件等信息，但没有适用于全部品类的单一“逐位解码规则”。采购与售后应以包装标签、产品本体印字和配置器/目录中的完整产品号为准；不要删减后缀或根据相似编号替代。",
     official: true,
     keywords: ["Blum产品编号", "产品号规则", "型号怎么看", "料号", "物料编码", "编号后缀", "part number", "article number", "订货型号"],
@@ -1500,7 +1500,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "blum-packaging-and-spares",
     title: "Blum 包装单位、配件包与维修件",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "Blum 的包装单位（PU）、是否成对销售、左右件、螺钉/连接件是否另购，均以产品号目录行和包装标签为准。维修时先保留旧件完整产品号、左右方向、长度和失效照片；阻尼器、锁定装置、盖帽、前板连接件等能否单独供应取决于系列和市场，不能默认“一个铰链包装含全部底座和螺钉”。",
     official: true,
     keywords: ["包装单位", "PU", "配件包", "维修件", "备件", "一包多少", "左右件", "是否含螺丝", "spare part", "packaging unit"],
@@ -1508,7 +1508,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "consumer-drawer-noise-diagnosis",
     title: "消费者：抽屉异响、卡顿或关闭不轻柔的排查顺序",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "先清空抽屉并缓慢开关，区分导轨摩擦、前板碰撞和柜内物品碰撞；再确认抽屉两侧完全推入、左右导轨同长度同型号、锁定装置已卡紧。用软刷清除轨道碎屑后复测。不要向 BLUMOTION 阻尼器喷油、不要掰直导轨；仍有金属刮擦、明显间隙或无法闭合时，拍下产品号和故障视频，由授权服务商按型号更换。",
     official: true,
     keywords: ["抽屉响", "抽屉吱吱响", "抽屉卡", "抽屉涩", "抽屉关不轻", "抽屉不好拉", "抽斗卡住", "滑道响", "百隆抽屉异响", "drawer noise", "drawer stuck"],
@@ -1516,7 +1516,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "consumer-loose-hinge-adjustment",
     title: "消费者：铰链松动与门板松垮的安全调节",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "先扶住门板，检查铰杯固定螺钉、底座螺钉是否松动；用匹配螺丝刀分次拧紧，避免过拧造成板材滑牙。螺钉紧固后仍歪斜，再按“高度—侧向—深度”每次约 1/4 圈微调并合门复核。若螺钉在板内空转、铰杯裂开或底座变形，应停止使用并维修板材/更换同产品号部件。",
     official: true,
     keywords: ["铰链松了", "合页松", "柜门松垮", "门铰松动", "螺丝滑牙", "铰链怎么紧", "门板晃", "百隆合页松", "loose hinge"],
@@ -1540,7 +1540,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "consumer-drawer-runner-replacement",
     title: "消费者：抽屉滑轨损坏后的替换信息采集",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "替换前取下抽屉，拍摄左右导轨、锁定装置和包装/本体印字；记录产品号、标称长度、左右件、承重等级、抽屉箱结构及是否带 BLUMOTION、TIP-ON 或 SERVO-DRIVE。不要只按“长度相同”购买通用轨：MOVENTO、TANDEM、METABOX 和抽屉箱系统的孔位及连接件不同。安装后空载开关 10 次、再逐步加载测试。",
     official: true,
     keywords: ["抽屉滑轨坏了", "导轨怎么换", "百隆导轨更换", "抽屉轨道断了", "滑道坏", "抽屉拉不出来", "托底轨换", "drawer runner replacement", "换滑轨"],
@@ -1548,7 +1548,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "consumer-door-wont-close",
     title: "消费者：柜门关不上、关不紧的检查",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "先清除柜内顶住门板的物品，检查拉手、相邻门和台面是否碰撞；再确认铰链臂完全扣入底座、门板没有翘曲。门板前凸时用深度调节小幅后移，双门中缝过紧时用侧向调节释放，每次约 1/4 圈并复测。TIP-ON 门还要检查磁吸对位；不得拆开阻尼器或强压关门。",
     official: true,
     keywords: ["柜门关不上", "柜门关不紧", "门关不严", "橱柜门弹开", "门合不上", "柜门顶住", "关门反弹", "door will not close", "门留缝"],
@@ -1572,7 +1572,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "consumer-retrofit-old-furniture",
     title: "消费者：老家具能否改装 Blum 配件",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "老家具可以评估改装，但不能以“35 mm 杯孔相同”直接判定兼容。需测量门厚、杯孔直径/深度、C 值、柜侧板、门缝、抽屉内宽和旧件孔位，并确认板材仍有握钉力。旧铰链或旧导轨的孔位可能不适配现行产品；建议先由安装人员用单门/单屉试装，再决定整套改造。",
     official: true,
     keywords: ["老家具换百隆", "旧柜改百隆", "旧铰链能换吗", "老橱柜改造", "能装百隆吗", "旧抽屉换导轨", "翻新家具五金", "retrofit", "replacement compatibility"],
@@ -1700,7 +1700,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "design-custom-furniture-tolerances",
     title: "设计：定制家具尺寸配合与公差交付",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "把柜体内宽、板厚、门厚、门缝、杯孔 C 值、导轨安装高度、前板搭接和基准面写进加工图；不可只给效果图或成品外尺寸。先选准确产品号，再导出对应钻孔图和 CAD 数据。现场复尺若柜体方正度、墙地面水平超出可调范围，应先修正柜体。",
     official: true,
     keywords: ["定制家具公差", "柜体尺寸配合", "门缝加工图", "板厚五金", "柜体内宽", "家具深化", "custom furniture tolerance", "cabinet dimensions"],
@@ -1708,7 +1708,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "install-hinge-cup-template",
     title: "安装：35 mm 铰杯孔模板的使用流程",
-    url: "https://www.blum.com/cn/zh/services/machines-and-assembly-devices/",
+    url: "https://www.blum.com/connects/zh/app/services",
     summary: "确认产品号对应的杯孔直径、杯深和固定孔距后，将模板以门边基准夹紧；先在废料试钻，检查 C 值、孔深和固定孔位置。正式钻孔保持钻头垂直并设限深，避免穿透门面；钻后清屑再装铰杯。模板只是定位辅助，不能替代产品号钻孔图。",
     official: true,
     keywords: ["铰链模板怎么用", "35mm杯孔模板", "合页开孔定位", "杯孔钻", "铰链打孔", "门板钻孔", "hinge jig", "cup drilling template"],
@@ -1724,7 +1724,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "install-movento-preinstallation",
     title: "安装：MOVENTO 导轨预装与抽屉挂装技巧",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "先核对左右导轨产品号、标称长度和安装高度一致，以柜体前沿/后定位孔为同一基准固定；柜体对角线和内宽异常先整改。抽屉挂装时同时对正两侧导轨，平推至锁定装置完全扣合，再空载开关数次。不要以敲击、硬推或弯折导轨方式处理无法挂入。",
     official: true,
     keywords: ["MOVENTO预装", "movento安装", "托底轨挂抽", "抽屉挂不上", "锁定装置", "隐藏轨预装", "runner preinstallation", "movento fitting"],
@@ -1740,7 +1740,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "install-level-and-square-check",
     title: "安装：确认柜体水平、垂直与方正的方法",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "安装五金前以水平尺检查柜体底板/导轨基准线，以角尺检查侧板与底板，以对角线比较检查方正；两条对角线差、柜体内宽前后差和侧板扭曲应记录并按项目公差处理。导轨、底座只能补偿有限门缝误差，不能纠正明显柜体变形。",
     official: true,
     keywords: ["柜体怎么找平", "柜体方正", "导轨水平", "安装水平尺", "对角线误差", "柜子不方", "cabinet level", "cabinet square"],
@@ -1748,7 +1748,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "install-door-drilling-layout",
     title: "安装：门板打孔定位与试装",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "从最终门边基准标出杯孔中心和固定孔，以产品号图纸确认 C 值、杯深、孔距和螺钉方式；先在同批板材试钻、试装并检查最小门缝与开门干涉。批量加工前锁定首件；不可把不同门厚、不同铰链角度或铝框/玻璃门的孔位套用到同一模板。",
     official: true,
     keywords: ["门板打孔定位", "铰链孔怎么定位", "杯孔中心", "门板开孔图", "首件试装", "铰链加工", "door drilling layout", "hinge boring"],
@@ -1764,7 +1764,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "install-post-installation-functional-test",
     title: "安装：安装后的功能测试清单",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "先空载连续开关门/抽屉至少 10 次，确认无刮擦、异响、回弹或松脱；再检查门缝、前板齐平、抽屉全行程、BLUMOTION/TIP-ON/SERVO-DRIVE 功能。随后按预计物品逐步加载，复查柜体固定、螺钉和门板停留。将产品号、调节结果和异常视频交付给售后留档。",
     official: true,
     keywords: ["安装后测试", "抽屉验收", "柜门功能测试", "五金调试", "安装验收清单", "开关十次", "functional test", "installation checklist"],
@@ -1772,7 +1772,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "install-common-errors-correction",
     title: "安装：常见错误与纠正路径",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "高频错误包括左右导轨混用、标称长度不一致、锁定装置未扣、铰链未完全卡入底座、杯孔过深/偏位和柜体未找平。纠正顺序为：停止强行运行，核对产品号和图纸，恢复基准尺寸/孔位，再重新挂装并做功能测试。禁止通过加垫片、强拧阻尼或弯折轨道掩盖结构错误。",
     official: true,
     keywords: ["安装错误", "导轨装反", "铰链没扣上", "抽屉装错", "杯孔打歪", "五金返工", "installation mistake", "runner installed wrong"],
@@ -1780,7 +1780,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "install-original-tools-selection",
     title: "安装：Blum 原厂工具与使用边界",
-    url: "https://www.blum.com/cn/zh/services/machines-and-assembly-devices/",
+    url: "https://www.blum.com/connects/zh/app/services",
     summary: "现场可用模板、定位夹具、35 mm 杯钻、限深装置、扭矩可控电批、水平/角尺；批量加工可评估 MINIPRESS、EASYSTICK 等设备。工具选择须跟随产品号加工图、产能和首件验证，原厂工具也不能替代孔位数据与设备校准。电批应先在试件设定扭矩，避免板材滑牙。",
     official: true,
     keywords: ["Blum原厂工具", "百隆安装工具", "铰链定位夹具", "电批扭矩", "杯孔设备", "钻孔设备", "Blum tools", "assembly device"],
@@ -1788,7 +1788,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "procurement-product-number-decoding",
     title: "采购：Blum 产品号的正确解读方式",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "产品号中的字母/数字会关联系列、功能、版本、长度、承重、表面或左右件，但不存在覆盖全部品类的通用逐位解码表。采购应以包装标签、本体印字、当期目录和配置器的完整产品号核对；不得删除后缀、凭相似前缀替代，特别是左右件、长度和动感技术版本。",
     official: true,
     keywords: ["Blum编码规则", "产品号怎么读", "料号解析", "物料号规则", "型号后缀", "百隆型号怎么看", "part number decoding", "article number"],
@@ -1796,7 +1796,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "procurement-product-number-specification",
     title: "采购：用产品号查询规格的步骤",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "以完整产品号在 Blum 产品配置器、中文目录或授权经销商系统查询，逐项确认品类、左右件、标称长度、承重、颜色/表面、包装单位、必配连接件和市场可用性。若产品号来自旧件，需同时提交照片和安装尺寸；检索不到时不可依据名称猜测新型号，应请官方渠道确认替换关系。",
     official: true,
     keywords: ["料号查规格", "产品号查询", "百隆型号查尺寸", "用料号查配件", "型号查承重", "旧件查型号", "part number lookup", "specification query"],
@@ -1828,7 +1828,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "procurement-kit-vs-loose-parts",
     title: "采购：配件包与散件的区别及 BOM 核对",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "配件包可能只含某一功能组件，抽屉/上翻门/口袋门整套通常还需左右件、导轨或省力装置、前板连接件、后板/同步件、螺钉或电源等。下单按配置器输出的 BOM 逐行核对数量、左右、PU 和是否已含，不要把“套装”理解为完整可安装系统；到货时按标签分箱复点。",
     official: true,
     keywords: ["配件包和散件", "百隆套装", "BOM漏件", "抽屉配件清单", "五金缺件", "整套包含什么", "kit vs loose parts", "BOM check"],
@@ -1852,7 +1852,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "procurement-original-vs-compatible",
     title: "采购：Blum 原厂件与兼容品的风险比较",
-    url: "https://www.blum.com/cn/zh/services/e-services/product-configurator/",
+    url: "https://www.blum.com/us/en/services/e-services/onlineproductconfigurator/",
     summary: "外形或孔距相近的兼容品不等于可替换：阻尼、承重、孔位、调节范围、表面耐久、动感技术兼容性和保修责任可能不同。若项目指定 Blum，应按完整原厂 BOM 采购；如评估替代，须经设计/甲方书面批准，并对尺寸、满载运行、安全和售后分别做样品验证，不能混装后默认保修。",
     official: true,
     keywords: ["百隆兼容品", "原厂和国产区别", "替代百隆", "兼容铰链", "混装五金", "Blum原厂件", "original vs compatible", "替代风险"],
@@ -1876,7 +1876,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "easy-assembly-product-number-workflow",
     title: "EASY ASSEMBLY：按产品号找到正确安装资料",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "使用 EASY ASSEMBLY 前准备 1 个完整产品号和 1 张现场照片；按 4 步操作：①搜索完整产品号而非只搜系列名；②确认页面显示的左右件、标称长度/版本与实物一致；③下载钻孔图或查看安装动画；④按图复核柜体、前板和孔位后再加工。找不到产品号时，保留包装标签、本体印字和 2 个安装尺寸提交给授权渠道，不要依据外观套用相近型号图纸。",
     official: true,
     keywords: ["EASY ASSEMBLY怎么用", "百隆安装视频", "安装图纸下载", "料号找安装图", "产品号找动画", "eazy assembly", "easyasemblly", "easiy assembly", "bai long anzhuang", "安装尺寸图"],
@@ -1884,7 +1884,7 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
   {
     id: "production-first-article-hardware-validation",
     title: "生产：五金首件确认与批量放行",
-    url: "https://www.blum.com/cn/zh/services/e-services/easy-assembly/",
+    url: "https://www.blum.com/us/en/services/e-services/easyassemblyapp/",
     summary: "量产前必须完成至少 1 套首件：按完整产品号核对左右件、长度和配件包；按官方钻孔图加工并装配；空载连续开合 10 次，再按目标使用状态加载复查门缝、全行程和干涉。首件合格后才冻结 CNC 程序、钻孔模板和 BOM；若现场靠垫片或强力才能运行，应回到产品号、柜体尺寸和孔位排查，不能直接批量生产。",
     official: true,
     keywords: ["百隆首件", "五金首件确认", "五金量产", "CNC钻孔图", "批量生产五金", "抽屉首件测试", "shoujian", "bai long shoujian", "first article inspection", "hardware production validation"],
