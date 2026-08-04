@@ -70,6 +70,7 @@ interface TimelineMessage {
   followUps?: string[];
   mode?: "live" | "demo" | "guarded";
   sources?: SourceReference[];
+  createdAt?: number;
 }
 
 function createId(): string {
@@ -142,6 +143,11 @@ export function BlumAgent() {
   const [isLoading, setIsLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [copiedSourceId, setCopiedSourceId] = useState<string | null>(null);
+  const [connectionState, setConnectionState] = useState<"online" | "reconnecting">("online");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
@@ -170,6 +176,15 @@ export function BlumAgent() {
         if (draft || attachment) { setDraft(""); setAttachment(null); setError(""); inputRef.current?.focus(); }
         return;
       }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key === "Backspace" &&
+        isInputFocused
+      ) {
+        e.preventDefault();
+        setDraft("");
+        return;
+      }
       if (e.key === "?" && !isInputFocused) { setShowHelp(true); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         if (!isLoading && draft.trim()) void submitQuestion();
@@ -191,6 +206,33 @@ export function BlumAgent() {
     setDraft(prompt);
     setError("");
     inputRef.current?.focus();
+  }
+
+  function formatMessageTime(timestamp?: number): string {
+    if (!timestamp) return "";
+    return new Intl.DateTimeFormat("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(timestamp);
+  }
+
+  async function copySourceLink(source: SourceReference) {
+    try {
+      await navigator.clipboard?.writeText(source.url);
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = source.url;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand("copy");
+      field.remove();
+    }
+    setCopiedSourceId(source.id);
+    window.setTimeout(() => setCopiedSourceId(null), 1800);
   }
 
   function handleAttachment(file?: File) {
@@ -234,11 +276,13 @@ export function BlumAgent() {
       id: createId(),
       role: "user",
       content: question,
+      createdAt: Date.now(),
     };
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setDraft("");
     setError("");
+    setConnectionState("online");
     setIsLoading(true);
     isStreamingRef.current = true;
     const requestVersion = requestVersionRef.current + 1;
@@ -328,6 +372,7 @@ export function BlumAgent() {
       if (requestVersion !== requestVersionRef.current) return;
       setAttachment(null);
       isStreamingRef.current = false;
+      setConnectionState("online");
     } catch (caught) {
       // Don't handle abort or stale requests
       if (requestVersion !== requestVersionRef.current || (caught instanceof DOMException && caught.name === "AbortError")) return;
@@ -364,6 +409,7 @@ export function BlumAgent() {
             ? body.error.message
             : "暂时无法获得回答，请稍后重试。",
         );
+        setConnectionState("reconnecting");
         return;
       }
 
@@ -382,6 +428,7 @@ export function BlumAgent() {
         ),
       );
       setAttachment(null);
+      setConnectionState("online");
     } finally {
       if (requestVersion === requestVersionRef.current) {
         setIsLoading(false);
@@ -398,6 +445,7 @@ function startNewConversation() {
     setDraft("");
     setAttachment(null);
     setError("");
+    setConnectionState("online");
     setIsLoading(false);
     isStreamingRef.current = false;
     inputRef.current?.focus();
@@ -434,9 +482,9 @@ function startNewConversation() {
             <RefreshCcw aria-hidden="true" size={15} />
             开始新对话
           </button>
-          <div className="system-status" aria-label="系统状态">
+          <div className="system-status" aria-label={connectionState === "online" ? "系统在线" : "正在重新连接"}>
             <span className="status-dot" aria-hidden="true" />
-            官方资料优先
+            {connectionState === "online" ? "官方资料优先" : "正在重新连接"}
           </div>
         </div>
       </header>
@@ -498,6 +546,7 @@ function startNewConversation() {
           <div
             className="conversation-scroll"
             aria-live="polite"
+            aria-label="与 Blum Agent 的对话记录"
             ref={conversationRef}
           >
             {messages.length === 0 ? (
@@ -512,6 +561,15 @@ function startNewConversation() {
                   把五金方案做到<span>有据可查。</span>
                 </h2>
                 <p>{selectedRole.description}</p>
+                <button
+                  className="quick-question"
+                  onClick={() => inputRef.current?.focus()}
+                  type="button"
+                >
+                  <Sparkles aria-hidden="true" size={16} />
+                  <span>随便问问</span>
+                  <small>把现场情况、型号或需求告诉我</small>
+                </button>
                 <div className="starter-grid">
                   {selectedRole.starterPrompts.map((prompt, index) => (
                     <button
@@ -558,6 +616,9 @@ function startNewConversation() {
                       <div className="message-author">
                         <CircleUserRound aria-hidden="true" size={17} />
                         你的问题
+                        <time dateTime={new Date(message.createdAt ?? Date.now()).toISOString()}>
+                          {formatMessageTime(message.createdAt)}
+                        </time>
                       </div>
                       <p>{message.content}</p>
                     </article>
@@ -582,11 +643,28 @@ function startNewConversation() {
                         ) : null}
                       </div>
                       <p className="answer-text">
-                        {message.content}
+                        {message.content.length > 500 && !expandedMessageIds.has(message.id)
+                          ? `${message.content.slice(0, 500)}…`
+                          : message.content}
                         {isStreamingRef.current && message.id === streamingMessageIdRef.current ? (
                           <span className="streaming-cursor" aria-hidden="true">_</span>
                         ) : null}
                       </p>
+                      {message.content.length > 500 ? (
+                        <button
+                          aria-expanded={expandedMessageIds.has(message.id)}
+                          className="answer-toggle"
+                          onClick={() => setExpandedMessageIds((current) => {
+                            const next = new Set(current);
+                            if (next.has(message.id)) next.delete(message.id);
+                            else next.add(message.id);
+                            return next;
+                          })}
+                          type="button"
+                        >
+                          {expandedMessageIds.has(message.id) ? "收起回答" : "展开完整回答"}
+                        </button>
+                      ) : null}
                       {message.mode === "demo" ? (
                         <p className="demo-note">
                           当前未连接模型服务，以上为官方资料导航回答。
@@ -602,12 +680,8 @@ function startNewConversation() {
                           <h2>参考的官方资料</h2>
                           <div className="source-grid">
                             {message.sources.map((source) => (
-                              <a
-                                href={source.url}
-                                key={source.id}
-                                rel="noopener noreferrer"
-                                target="_blank"
-                              >
+                              <div className="source-card" key={source.id}>
+                                <a href={source.url} rel="noopener noreferrer" target="_blank">
                                 <span>OFFICIAL</span>
                                 <strong>{source.title}</strong>
                                 <small>{source.summary}</small>
@@ -616,6 +690,15 @@ function startNewConversation() {
                                   size={16}
                                 />
                               </a>
+                                <button
+                                  aria-label={`复制 ${source.title} 链接`}
+                                  className="copy-source-button"
+                                  onClick={() => void copySourceLink(source)}
+                                  type="button"
+                                >
+                                  {copiedSourceId === source.id ? "已复制" : "复制链接"}
+                                </button>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -652,7 +735,19 @@ function startNewConversation() {
             {error ? (
               <div className="error-banner" role="alert">
                 <AlertTriangle aria-hidden="true" size={17} />
-                {error}
+                <span>{error}</span>
+                <button
+                  className="retry-button"
+                  onClick={() => {
+                    if (!draft.trim() || isLoading) return;
+                    setConnectionState("reconnecting");
+                    void submitQuestion();
+                  }}
+                  type="button"
+                >
+                  <RefreshCcw aria-hidden="true" size={14} />
+                  重试
+                </button>
               </div>
             ) : null}
             {attachment ? (
@@ -686,7 +781,7 @@ function startNewConversation() {
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
                     event.preventDefault();
-                    void submitQuestion();
+                    if (draft.trim()) void submitQuestion();
                   }
                 }}
                 placeholder={`以${selectedRole.label}身份提问：产品、选型、安装、采购…`}
@@ -695,7 +790,17 @@ function startNewConversation() {
                 value={draft}
               />
               <div className="composer-actions">
-                <label className={`attach-button${isUploading ? " uploading" : ""}`}>
+                <label
+                  className={`attach-button${isUploading ? " uploading" : ""}`}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.currentTarget.querySelector<HTMLInputElement>("input")?.click();
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
                   <ImagePlus aria-hidden="true" size={18} />
                   <span>添加现场图片</span>
                   <input
@@ -706,6 +811,7 @@ function startNewConversation() {
                       event.currentTarget.value = "";
                     }}
                     type="file"
+                    tabIndex={-1}
                   />
                 </label>
                 <button
@@ -729,7 +835,7 @@ function startNewConversation() {
               <p className="composer-note">
                 型号、尺寸、承重、孔位与最终下单信息，请以当前市场官方资料复核。
               </p>
-              <span aria-hidden="true">Enter 发送 · Shift+Enter 换行</span>
+              <span aria-hidden="true">Enter 发送 · Ctrl+Backspace 清空</span>
             </div>
           </div>
         </section>

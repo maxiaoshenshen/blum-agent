@@ -420,6 +420,48 @@ label:focus-within {
   line-height: 1.85;
 }
 
+.quick-question {
+  display: flex;
+  width: min(610px, 100%);
+  min-height: 48px;
+  padding: 0 14px;
+  align-items: center;
+  margin-top: 24px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 253, 248, 0.72);
+  color: var(--ink-soft);
+  cursor: text;
+  gap: 10px;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.quick-question:hover {
+  border-color: var(--signal);
+  background: var(--white);
+}
+
+.quick-question svg,
+.quick-question span {
+  color: var(--signal-dark);
+  flex: 0 0 auto;
+}
+
+.quick-question span {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.quick-question small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .starter-grid {
   display: grid;
   margin-top: clamp(36px, 5vh, 58px);
@@ -542,6 +584,14 @@ label:focus-within {
   color: #bcbab0;
 }
 
+.message-user time {
+  margin-left: auto;
+  color: #bcbab0;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
 .message-user > p {
   margin: 13px 0 0;
   font-size: 15px;
@@ -599,6 +649,21 @@ label:focus-within {
   white-space: pre-wrap;
 }
 
+.answer-toggle {
+  padding: 0;
+  margin-top: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--signal-dark);
+  cursor: pointer;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .demo-note,
 .guarded-note {
   padding: 12px 14px;
@@ -638,13 +703,18 @@ label:focus-within {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.source-card {
+  position: relative;
+  min-height: 146px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
 .source-grid a {
   position: relative;
   display: grid;
   min-height: 146px;
-  padding: 18px 40px 18px 18px;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  padding: 18px 40px 42px 18px;
   color: var(--ink);
   gap: 8px;
   text-decoration: none;
@@ -653,6 +723,25 @@ label:focus-within {
 
 .source-grid a:hover {
   background: var(--paper-deep);
+}
+
+.copy-source-button {
+  position: absolute;
+  right: 12px;
+  bottom: 11px;
+  padding: 4px 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--white);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 8px;
+  letter-spacing: 0.03em;
+}
+
+.copy-source-button:hover {
+  border-color: var(--signal);
+  color: var(--signal-dark);
 }
 
 .source-grid a > span {
@@ -776,7 +865,9 @@ label:focus-within {
   width: 100%;
   min-height: 90px;
   padding: 19px 20px;
-  resize: none;
+  max-height: 190px;
+  overflow-y: auto;
+  resize: vertical;
   border: 0;
   outline: 0;
   background: transparent;
@@ -902,6 +993,30 @@ label:focus-within {
   border: 1px solid #d9a589;
   background: #fff0e8;
   color: #833313;
+}
+
+.error-banner > span {
+  min-width: 0;
+}
+
+.retry-button {
+  display: inline-flex;
+  min-height: 26px;
+  padding: 0 8px;
+  align-items: center;
+  margin-left: auto;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.retry-button:hover {
+  background: rgba(131, 51, 19, 0.08);
 }
 
 .attachment-chip {
@@ -1128,6 +1243,10 @@ label:focus-within {
     grid-template-columns: 1fr;
   }
 
+  .source-card {
+    min-height: 132px;
+  }
+
   .composer-wrap {
     padding: 10px 12px 9px;
   }
@@ -1139,6 +1258,7 @@ label:focus-within {
   .composer textarea {
     min-height: 72px;
     padding: 15px;
+    resize: vertical;
   }
 
   .composer-actions {

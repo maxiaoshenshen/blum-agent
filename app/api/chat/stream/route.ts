@@ -1,5 +1,4 @@
 import {
-  answerChat,
   providerConfigFromEnvironment,
 } from "@/src/agent/chat";
 import { requestChatCompletion } from "@/src/agent/provider";
@@ -9,11 +8,15 @@ import { buildSystemPrompt } from "@/src/agent/prompt";
 import { getRole } from "@/src/domain/roles";
 import { retrieveKnowledge, classifyRisk } from "@/src/domain/retrieval";
 import type { OfficialSource } from "@/src/domain/types";
+import { ProviderError } from "@/src/agent/provider";
 
 const API_RESPONSE_HEADERS = {
   "Cache-Control": "no-store, max-age=0",
   "X-Content-Type-Options": "nosniff",
 } as const;
+const MAX_REQUEST_BYTES = 7_500_000;
+const STREAM_TIMEOUT_MS = 60_000;
+const HEARTBEAT_MS = 15_000;
 
 const globalRateLimiter = new FixedWindowRateLimiter({
   limit: 30,
@@ -24,21 +27,25 @@ const globalRateLimiter = new FixedWindowRateLimiter({
 async function readJsonBody(request: Request): Promise<unknown> {
   const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.startsWith("application/json")) {
-    return { error: { code: "unsupported_media_type", message: "请求必须使用 application/json 格式。", status: 415 } };
+    throw new BodyReadError("unsupported_media_type", "请求必须使用 application/json 格式。", 415);
+  }
+  const declaredLength = Number(request.headers.get("content-length") ?? 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
+    throw new BodyReadError("request_too_large", "请求内容过大。", 413);
   }
   const chunks: Uint8Array[] = [];
   let receivedBytes = 0;
   const reader = request.body?.getReader();
   if (!reader) {
-    return { error: { code: "invalid_json", message: "请求内容不是有效的 JSON。", status: 400 } };
+    throw new BodyReadError("invalid_json", "请求内容不是有效的 JSON。", 400);
   }
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     receivedBytes += value.byteLength;
-    if (receivedBytes > 7_500_000) {
+    if (receivedBytes > MAX_REQUEST_BYTES) {
       await reader.cancel();
-      return { error: { code: "request_too_large", message: "请求内容过大。", status: 413 } };
+      throw new BodyReadError("request_too_large", "请求内容过大。", 413);
     }
     chunks.push(value);
   }
@@ -51,7 +58,17 @@ async function readJsonBody(request: Request): Promise<unknown> {
   try {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
-    return { error: { code: "invalid_json", message: "请求内容不是有效的 JSON。", status: 400 } };
+    throw new BodyReadError("invalid_json", "请求内容不是有效的 JSON。", 400);
+  }
+}
+
+class BodyReadError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
   }
 }
 
@@ -73,17 +90,25 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const bodyOrError = await readJsonBody(request);
-  if ("error" in bodyOrError) {
+  let body: unknown;
+  try {
+    body = await readJsonBody(request);
+  } catch (error) {
+    if (error instanceof BodyReadError) {
+      return new Response(
+        sse("error", { code: error.code, message: error.message }),
+        { status: error.status, headers: API_RESPONSE_HEADERS },
+      );
+    }
     return new Response(
-      sse("error", { code: bodyOrError.error.code, message: bodyOrError.error.message }),
-      { status: bodyOrError.error.status, headers: API_RESPONSE_HEADERS },
+      sse("error", { code: "invalid_json", message: "请求内容不是有效的 JSON。" }),
+      { status: 400, headers: API_RESPONSE_HEADERS },
     );
   }
 
   let parsed;
   try {
-    parsed = parseChatRequest(bodyOrError);
+    parsed = parseChatRequest(body);
   } catch (error) {
     if (error instanceof ValidationError) {
       return new Response(
@@ -120,58 +145,90 @@ export async function POST(request: Request): Promise<Response> {
     official: true as const,
   }));
 
-  const controller = new ReadableStreamDefaultController();
   const encoder = new TextEncoder();
 
-  function send(key: string, data: unknown) {
-    try {
-      controller.enqueue(encoder.encode(sse(key, data)));
-    } catch { /* stream may already be closed */ }
-  }
+  const upstreamController = new AbortController();
+  let cancelled = request.signal.aborted;
+  const abortUpstream = () => {
+    cancelled = true;
+    upstreamController.abort();
+  };
+  request.signal.addEventListener("abort", abortUpstream, { once: true });
 
-  send("start", { sources });
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        clearTimeout(timeout);
+        clearInterval(heartbeat);
+        request.signal.removeEventListener("abort", abortUpstream);
+        try { controller.close(); } catch { /* client may have disconnected */ }
+      };
+      const send = (key: string, data: unknown) => {
+        if (closed || cancelled) return;
+        try { controller.enqueue(encoder.encode(sse(key, data))); } catch { close(); }
+      };
+      const timeout = setTimeout(() => upstreamController.abort(), STREAM_TIMEOUT_MS);
+      const heartbeat = setInterval(() => {
+        if (!closed && !cancelled) {
+          try { controller.enqueue(encoder.encode(":\n\n")); } catch { close(); }
+        }
+      }, HEARTBEAT_MS);
+      const fetchWithCancellation: typeof fetch = (input, init) => fetch(input, {
+        ...init,
+        signal: AbortSignal.any(
+          [upstreamController.signal, init?.signal].filter(Boolean) as AbortSignal[],
+        ),
+      });
 
-  try {
-    let fullText = "";
-    const finalAnswer = await requestChatCompletion(
-      {
-        config,
-        systemPrompt,
-        messages: parsed.messages,
-        image: parsed.image,
-      },
-      fetch,
-      async (chunk: string) => {
-        fullText += chunk;
-        send("chunk", { text: chunk, accumulated: fullText });
-      },
-    );
+      send("start", { sources });
+      void (async () => {
+        try {
+          let fullText = "";
+          const finalAnswer = await requestChatCompletion(
+            {
+              config,
+              systemPrompt,
+              messages: parsed.messages,
+              image: parsed.image,
+              timeoutMs: STREAM_TIMEOUT_MS,
+            },
+            fetchWithCancellation,
+            async (chunk: string) => {
+              fullText += chunk;
+              send("chunk", { text: chunk, accumulated: fullText });
+            },
+          );
+          if (cancelled) return;
+          send("done", {
+            answer: finalAnswer,
+            confidence: risk === "precision" ? "needs-review" : "guided",
+            followUps: risk === "precision"
+              ? ["补充完整产品编号与所在市场", "提供柜体、面板和应用场景参数", "用官方配置器或当前订购手册做最终复核"]
+              : ["提供柜体尺寸、门型和期望开合方式", "说明空间、风格与收纳目标"],
+            sources,
+          });
+        } catch (error) {
+          if (!cancelled) {
+            const providerError = error instanceof ProviderError ? error : undefined;
+            send("error", {
+              code: providerError?.code ?? "internal_error",
+              message: providerError?.message ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。",
+            });
+          }
+        } finally {
+          close();
+        }
+      })();
+    },
+    cancel() {
+      abortUpstream();
+    },
+  });
 
-    send("done", {
-      answer: finalAnswer,
-      confidence: risk === "precision" ? "needs-review" : "guided",
-      followUps: risk === "precision"
-        ? [
-            "补充完整产品编号与所在市场",
-            "提供柜体、面板和应用场景参数",
-            "用官方配置器或当前订购手册做最终复核",
-          ]
-        : [
-            "提供柜体尺寸、门型和期望开合方式",
-            "说明空间、风格与收纳目标",
-          ],
-      sources,
-    });
-
-    controller.close();
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Blum Agent 暂时无法处理这个问题，请稍后重试。";
-    send("error", { code: "internal_error", message });
-    controller.close();
-  }
-
-  return new Response(controller.stream, {
+  return new Response(stream, {
     headers: {
       ...API_RESPONSE_HEADERS,
       "Content-Type": "text/event-stream; charset=utf-8",

@@ -31,7 +31,9 @@ interface ChatCompletionResponse {
 }
 
 const MAX_OUTPUT_CHARACTERS = 12_000;
-const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504]);
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1_000;
 
 export class ProviderError extends Error {
   readonly code: string;
@@ -72,7 +74,18 @@ function toProviderMessages(
   ];
 }
 
-function mapStatus(status: number): ProviderError {
+async function mapStatus(response: Response): Promise<ProviderError> {
+  let upstreamCode = "";
+  try {
+    const body = (await response.clone().json()) as {
+      error?: { code?: unknown; type?: unknown };
+    };
+    upstreamCode = String(body.error?.code ?? body.error?.type ?? "");
+  } catch {
+    // A non-JSON upstream response is still handled safely by its status.
+  }
+
+  const { status } = response;
   if (status === 429) {
     return new ProviderError(
       "rate_limited",
@@ -87,11 +100,32 @@ function mapStatus(status: number): ProviderError {
       503,
     );
   }
+  if (status === 400 || upstreamCode === "context_length_exceeded") {
+    return new ProviderError(
+      "provider_request",
+      upstreamCode === "context_length_exceeded"
+        ? "问题内容或图片过大，请缩短后重试。"
+        : "模型服务无法处理当前请求，请缩短问题或稍后重试。",
+      502,
+    );
+  }
   return new ProviderError(
     "upstream_error",
     "模型服务暂时不可用，请稍后重试。",
     502,
   );
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof DOMException
+      ? error.name === "AbortError"
+      : error instanceof Error && error.name === "AbortError"
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function requestChatCompletion(
@@ -127,21 +161,31 @@ export async function requestChatCompletion(
       signal: controller.signal,
     };
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
       let response: Response;
       try {
         response = await fetchImpl(input, init);
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
+        if (isAbortError(error)) {
           throw error;
         }
-        if (attempt === 0) continue;
-        throw error;
+        if (attempt < MAX_RETRIES) {
+          await delay(RETRY_DELAY_MS);
+          continue;
+        }
+        throw new ProviderError(
+          "network_error",
+          "暂时无法连接模型服务，请检查网络后重试。",
+          502,
+        );
       }
 
       if (!response.ok) {
-        if (attempt === 0 && RETRYABLE_STATUSES.has(response.status)) continue;
-        throw mapStatus(response.status);
+        if (attempt < MAX_RETRIES && RETRYABLE_STATUSES.has(response.status)) {
+          await delay(RETRY_DELAY_MS);
+          continue;
+        }
+        throw await mapStatus(response);
       }
 
       if (onChunk) {
@@ -157,10 +201,14 @@ export async function requestChatCompletion(
         const decoder = new TextDecoder();
         let buffer = "";
         let finalText = "";
+        let completed = false;
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              completed = true;
+              break;
+            }
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split("\n");
             buffer = lines.pop() ?? "";
@@ -185,6 +233,11 @@ export async function requestChatCompletion(
               }
             }
           }
+        } catch (error) {
+          if (!completed) {
+            await reader.cancel(error).catch(() => undefined);
+          }
+          throw error;
         } finally {
           reader.releaseLock();
         }
@@ -249,7 +302,7 @@ export async function requestChatCompletion(
     );
   } catch (error) {
     if (error instanceof ProviderError) throw error;
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (isAbortError(error)) {
       throw new ProviderError(
         "timeout",
         "模型服务响应较慢，请稍后重试。",
