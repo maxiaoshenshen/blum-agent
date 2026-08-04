@@ -6,14 +6,24 @@ const latinTermPattern = /[a-z][a-z0-9-]{2,}/gi;
 const sectionPrefixPattern =
   /^(?:结论|判断依据|操作步骤|下一步|还需确认|待确认问题|建议核实方式|实际体验改善(?:（[^）]*）)?|摘录原文|补充说明)\s*[：:]\s*/;
 const verificationGuidancePattern =
-  /(?:需|需要|应|请|建议).*(?:官方|配置器|目录|资料|手册).*(?:确认|核实|复核|参考|查询)|(?:可以|建议|请|需|需要|应).*(?:查看|查阅|查询|参考|使用).*(?:官方|配置器|目录|资料|手册)|(?:具体|完整).*需要.*(?:官方|配置器|目录|资料|手册)/u;
+  /(?:需|需要|应|请|建议).*(?:官方|配置器|目录|资料|手册).*(?:确认|核实|复核|参考|查询|查看|查阅|使用)|(?:可以|建议|请|需|需要|应).*(?:查看|查阅|查询|参考|使用).*(?:官方|配置器|目录|资料|手册)|(?:具体|完整).*需要.*(?:官方|配置器|目录|资料|手册)|请查看官方资料|建议用配置器核实/u;
 
 function normalize(value: string): string {
   return value
     .normalize("NFKC")
     .toLocaleLowerCase("zh-CN")
     .replace(/[®™]/g, "")
+    .replace(/[\p{P}\p{S}]/gu, "")
     .replace(/\s+/g, "");
+}
+
+function sourceTerms(
+  sources: readonly Pick<OfficialSource, "title" | "summary" | "url">[],
+): string[] {
+  return sources
+    .flatMap((source) => [source.title, ...source.title.match(/[A-Za-z][A-Za-z0-9-]{2,}/g) ?? []])
+    .map(normalize)
+    .filter((term) => term.length >= 3);
 }
 
 function hanBigrams(value: string): string[] {
@@ -46,8 +56,16 @@ function claimChunks(answer: string): string[] {
     );
 }
 
-function claimIsCovered(claim: string, context: string): boolean {
+function claimIsCovered(
+  claim: string,
+  context: string,
+  terms: readonly string[],
+): boolean {
   const normalizedClaim = normalize(claim);
+
+  // A complete sentence from an official title or summary remains grounded even
+  // if its punctuation/spacing differs from the stored source.
+  if (context.includes(normalizedClaim)) return true;
 
   for (const measurement of claim.match(measurementPattern) ?? []) {
     if (!context.includes(normalize(measurement))) return false;
@@ -58,6 +76,13 @@ function claimIsCovered(claim: string, context: string): boolean {
   }
 
   if (verificationGuidancePattern.test(claim)) return true;
+
+  // Very short, clearly product-labelled status answers do not carry enough
+  // Han bigrams for a meaningful coverage ratio. They still need to name an
+  // official product/brand term, so generic assertions are not exempt.
+  if (normalizedClaim.length < 20 && terms.some((term) => normalizedClaim.includes(term))) {
+    return true;
+  }
 
   const bigrams = hanBigrams(normalizedClaim);
   if (bigrams.length === 0) {
@@ -78,9 +103,10 @@ export function isGroundedModelAnswer(
       .join("\n"),
   );
   const claims = claimChunks(answer);
+  const terms = sourceTerms(sources);
   return (
     claims.length > 0 &&
-    claims.every((claim) => claimIsCovered(claim, context))
+    claims.every((claim) => claimIsCovered(claim, context, terms))
   );
 }
 
@@ -94,10 +120,11 @@ export function groundModelAnswer(
       .join("\n"),
   );
   const claims = claimChunks(answer);
+  const terms = sourceTerms(sources);
   if (claims.length === 0) return undefined;
 
   const groundedClaims = claims.filter((claim) =>
-    claimIsCovered(claim, context),
+    claimIsCovered(claim, context, terms),
   );
   if (groundedClaims.length === 0) return undefined;
 

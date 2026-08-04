@@ -46,6 +46,11 @@ describe("official knowledge retrieval", () => {
     ]).toContain(id);
   });
 
+  it("recognizes common Chinese phonetic typos and compact brand aliases", () => {
+    expect(retrieveKnowledge("百龙铰链怎么调")[0].source.id).toMatch(/hinge|blumotion/);
+    expect(retrieveKnowledge("bl 抽屉系统")[0].source.id).toMatch(/drawer|merivobox|legrabox|tandembox/);
+  });
+
   it("keeps specific merivobox results ahead of generic catalogue results", () => {
     const ids = retrieveKnowledge("MERIVOBOX 魅宝抽屉安装", 6).map(
       ({ source }) => source.id,

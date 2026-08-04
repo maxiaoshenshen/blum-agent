@@ -120,6 +120,82 @@ describe("Blum chat orchestration", () => {
     expect(response.followUps).toContain("提供产品型号和正面、侧面现场照片");
     expect(response.followUps).toContain("说明故障现象及已经尝试的调节步骤");
   });
+
+  it("guards exact drilling-dimension questions without calling the provider", async () => {
+    const requestCompletion = vi.fn(async () => "不应调用模型。");
+
+    const response = await answerChat(
+      {
+        role: "production",
+        messages: [{ role: "user", content: "请给我精确开孔尺寸和钻孔位置" }],
+      },
+      {
+        providerConfig: {
+          apiKey: "test-secret",
+          baseUrl: "https://provider.example",
+          model: "claude-opus-5",
+        },
+        requestCompletion,
+      },
+    );
+
+    expect(response.mode).toBe("guarded");
+    expect(response.confidence).toBe("needs-review");
+    expect(response.answer).toContain("当前不能安全确认");
+    expect(requestCompletion).not.toHaveBeenCalled();
+  });
+
+  it("keeps an out-of-scope question in transparent demo mode", async () => {
+    const response = await answerChat(
+      {
+        role: "consumer",
+        messages: [{ role: "user", content: "怎么做红烧肉？" }],
+      },
+      {},
+    );
+
+    expect(response.mode).toBe("demo");
+    expect(response.answer).toContain("演示模式");
+    expect(response.sources.every((source) => source.official)).toBe(true);
+  });
+
+  it("falls back when every model claim extends beyond official grounding", async () => {
+    const response = await answerChat(merivoboxRequest, {
+      providerConfig: {
+        apiKey: "test-secret",
+        baseUrl: "https://provider.example",
+        model: "claude-opus-5",
+      },
+      requestCompletion: vi.fn(
+        async () => "MERIVOBOX 可以自动烹饪，并配有 8K 激光投影。",
+      ),
+    });
+
+    expect(response.mode).toBe("guarded");
+    expect(response.answer).toContain("无法由当前官方摘要直接核实");
+    expect(response.answer).not.toContain("8K 激光投影");
+  });
+
+  it("declines questions outside Blum's service scope without calling the provider", async () => {
+    const requestCompletion = vi.fn(async () => "不应调用");
+    const response = await answerChat(
+      { role: "consumer", messages: [{ role: "user", content: "今天天气怎么样？" }] },
+      { providerConfig: { apiKey: "test-secret", baseUrl: "https://provider.example", model: "claude-opus-5" }, requestCompletion },
+    );
+
+    expect(response.mode).toBe("guarded");
+    expect(response.answer).toContain("不在 Blum Agent 的服务范围内");
+    expect(requestCompletion).not.toHaveBeenCalled();
+  });
+
+  it("adds a Chinese-language hint for non-Chinese Blum questions", async () => {
+    const response = await answerChat(
+      { role: "consumer", messages: [{ role: "user", content: "What is MERIVOBOX?" }] },
+      {},
+    );
+
+    expect(response.answer).toContain("建议用中文提问");
+  });
 });
 
 describe("provider environment validation", () => {

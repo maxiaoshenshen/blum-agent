@@ -28,11 +28,24 @@ test("server-renders the finished Chinese Blum Agent shell", async () => {
   const response = await request();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+  assert.equal(response.headers.get("x-dns-prefetch-control"), "on");
+  assert.equal(
+    response.headers.get("strict-transport-security"),
+    "max-age=63072000; includeSubDomains; preload",
+  );
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
-  assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
   assert.equal(
     response.headers.get("referrer-policy"),
-    "strict-origin-when-cross-origin",
+    "origin-when-cross-origin",
+  );
+  assert.equal(
+    response.headers.get("permissions-policy"),
+    "camera=(), microphone=(), geolocation=()",
+  );
+  assert.equal(
+    response.headers.get("content-security-policy"),
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';",
   );
 
   const html = await response.text();

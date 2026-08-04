@@ -1,4 +1,4 @@
-import { retrieveKnowledge, classifyRisk } from "@/src/domain/retrieval";
+import { retrieveKnowledge, classifyRisk, isBlumRelated } from "@/src/domain/retrieval";
 import { getRole } from "@/src/domain/roles";
 import type {
   ConfidenceLevel,
@@ -81,6 +81,7 @@ function demoAnswer(source: OfficialSource, risk: RiskLevel): string {
 function guardedAnswer(
   sources: SourceReference[],
   role: RoleId,
+  question = "",
 ): string {
   const confirmed = sources
     .slice(0, 2)
@@ -90,8 +91,16 @@ function guardedAnswer(
     .map((step, index) => `${index + 1}. ${step}`)
     .join("\n");
 
+  const focus = /料号|编号|bom|下单|订购/iu.test(question)
+    ? "产品编号、兼容关系或订购清单"
+    : /尺寸|开孔|孔位|加工/iu.test(question)
+      ? "尺寸、孔位或加工参数"
+      : /承重|负载|安全|电气|电源|接线/iu.test(question)
+        ? "负载、电气或安全要求"
+        : "精确尺寸、产品编号、兼容性、负载、电气、安全或最终下单";
+
   return `结论：
-这个问题涉及精确尺寸、产品编号、兼容性、负载、电气、安全或最终下单。现有官方资料摘要不足，当前不能安全确认具体结论，因此不直接生成未经核实的参数或零件关系。
+这个问题重点涉及${focus}。现有官方资料摘要不足，当前不能安全确认具体结论，因此不直接生成未经核实的参数或零件关系。
 
 已确认的官方资料范围：
 ${confirmed}
@@ -102,6 +111,14 @@ ${nextSteps}
 
 还需确认：
 完整产品编号、所在国家或市场、柜体与面板参数，以及能清楚看到五金标识和安装状态的照片。`;
+}
+
+function outOfScopeAnswer(): string {
+  return "这个问题不在 Blum Agent 的服务范围内。我专注于 Blum 百隆五金的产品选型、设计、销售、安装、生产、采购与使用问题。你可以告诉我具体的 Blum 产品、柜体应用或五金现象，我会基于官方资料协助你。";
+}
+
+function nonChineseHint(question: string): string {
+  return /[\p{Script=Han}]/u.test(question) ? "" : "\n\n提示：建议用中文提问以获得最佳体验；也可以附上产品型号、应用场景或照片。";
 }
 
 function groundedFallbackAnswer(
@@ -164,15 +181,25 @@ export async function answerChat(
   const question = [...request.messages]
     .reverse()
     .find((message) => message.role === "user")!.content;
-  const matches = retrieveKnowledge(question);
   const risk = classifyRisk(question);
+  const isInServiceScope = isBlumRelated(question) || risk === "precision";
+  if (!isInServiceScope && dependencies.providerConfig) {
+    return {
+      answer: outOfScopeAnswer(),
+      confidence: "guided",
+      followUps: roleFollowUps[request.role],
+      mode: "guarded",
+      sources: [],
+    };
+  }
+  const matches = retrieveKnowledge(question);
   const sources = matches.map(({ source }) => toSourceReference(source));
   const confidence: ConfidenceLevel =
     risk === "precision" ? "needs-review" : "guided";
 
   if (risk === "precision") {
     return {
-      answer: guardedAnswer(sources, request.role),
+      answer: guardedAnswer(sources, request.role, question) + nonChineseHint(question),
       confidence,
       followUps: followUpsFor(request.role, risk),
       mode: "guarded",
@@ -182,7 +209,7 @@ export async function answerChat(
 
   if (!dependencies.providerConfig) {
     return {
-      answer: demoAnswer(matches[0].source, risk),
+      answer: demoAnswer(matches[0].source, risk) + nonChineseHint(question),
       confidence,
       followUps: followUpsFor(request.role, risk),
       mode: "demo",
@@ -208,7 +235,7 @@ export async function answerChat(
   );
   if (!groundedAnswer) {
     return {
-      answer: groundedFallbackAnswer(sources, request.role),
+      answer: groundedFallbackAnswer(sources, request.role) + nonChineseHint(question),
       confidence,
       followUps: followUpsFor(request.role, risk),
       mode: "guarded",
@@ -217,7 +244,7 @@ export async function answerChat(
   }
 
   return {
-    answer: groundedAnswer,
+    answer: groundedAnswer + nonChineseHint(question),
     confidence,
     followUps: followUpsFor(request.role, risk),
     mode: "live",

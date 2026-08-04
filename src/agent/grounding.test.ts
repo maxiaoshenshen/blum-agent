@@ -19,6 +19,21 @@ describe("deterministic model grounding gate", () => {
     ).toBe(true);
   });
 
+  it("accepts a complete official-summary quote even when punctuation differs", () => {
+    expect(
+      isGroundedModelAnswer(
+        "BLUMOTION 是 Blum 自研的油压阻尼闭合技术，通过内置于产品内部的油压缓冲器实现轻柔无冲击的关闭效果",
+        [blumotionSource],
+      ),
+    ).toBe(true);
+  });
+
+  it("allows a short product-labelled answer without overfitting bigram coverage", () => {
+    expect(isGroundedModelAnswer("结论：BLUMOTION 需核实。", [blumotionSource])).toBe(
+      true,
+    );
+  });
+
   it.each([
     "MERIVOBOX 属于电动气压弹簧反弹开启系统。",
     "MERIVOBOX 可以搭配 ADUBO 和 SORTMATIC。",

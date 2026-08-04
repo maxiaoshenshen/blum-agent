@@ -31,15 +31,28 @@ export function generateMetadata(): Metadata {
     description,
     applicationName: "Blum Agent",
     keywords: [
-      "Blum",
       "百隆",
+      "Blum",
+      "五金",
       "家具五金",
+      "家具配件",
+      "铰链",
+      "抽屉",
+      "导轨",
+      "橱柜五金",
       "AVENTOS",
+      "CLIP top",
       "MERIVOBOX",
       "LEGRABOX",
       "MOVENTO",
       "BLUMOTION",
     ],
+    alternates: {
+      canonical: "/",
+    },
+    icons: {
+      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    },
     openGraph: {
       title,
       description,
@@ -67,7 +80,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   return (
     <html lang="zh-CN">
       <body className={`${notoSans.variable} ${plexMono.variable}`}>

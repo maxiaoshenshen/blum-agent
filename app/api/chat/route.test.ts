@@ -106,4 +106,64 @@ describe("POST /api/chat", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
+
+  it("rate limits the thirty-first request from the same client IP", async () => {
+    const clientIp = `198.51.100.${Math.floor(Math.random() * 200) + 1}`;
+    const makeRequest = () =>
+      POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "cf-connecting-ip": clientIp,
+          },
+          body: "{}",
+        }),
+      );
+
+    for (let index = 0; index < 30; index += 1) {
+      expect((await makeRequest()).status).toBe(400);
+    }
+
+    const response = await makeRequest();
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toMatch(/^\d+$/);
+    expect(await response.json()).toMatchObject({
+      error: { code: "rate_limited" },
+    });
+  });
+
+  it("prefers Cloudflare's client IP over x-forwarded-for", async () => {
+    const cfIp = `203.0.113.${Math.floor(Math.random() * 200) + 1}`;
+    const forwardedIp = `192.0.2.${Math.floor(Math.random() * 200) + 1}`;
+    const requestWithBothHeaders = () =>
+      POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "cf-connecting-ip": cfIp,
+            "x-forwarded-for": `${forwardedIp}, 10.0.0.1`,
+          },
+          body: "{}",
+        }),
+      );
+
+    for (let index = 0; index < 30; index += 1) {
+      expect((await requestWithBothHeaders()).status).toBe(400);
+    }
+    expect((await requestWithBothHeaders()).status).toBe(429);
+
+    const forwardedOnly = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": `${forwardedIp}, 10.0.0.1`,
+        },
+        body: "{}",
+      }),
+    );
+    expect(forwardedOnly.status).toBe(400);
+  });
 });
