@@ -36,11 +36,25 @@ const chatRateLimiter = new FixedWindowRateLimiter({
   maxEntries: 10_000,
 });
 
-function withSecurityHeaders(response: Response): Response {
+function staticCacheControl(pathname?: string): string | undefined {
+  if (pathname === "/og.png" || pathname === "/favicon.svg") {
+    // These public brand assets are versioned manually, so keep the browser
+    // cache useful without making a future replacement impossible to roll out.
+    return "public, max-age=604800, stale-while-revalidate=86400";
+  }
+
+  if (pathname === "/robots.txt" || pathname === "/sitemap.xml") {
+    return "public, max-age=3600, stale-while-revalidate=300";
+  }
+}
+
+function withSecurityHeaders(response: Response, pathname?: string): Response {
   const headers = new Headers(response.headers);
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     headers.set(key, value);
   }
+  const cacheControl = staticCacheControl(pathname);
+  if (cacheControl) headers.set("Cache-Control", cacheControl);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -99,7 +113,7 @@ const worker = {
       return withSecurityHeaders(response);
     }
 
-    return withSecurityHeaders(await handler.fetch(request, env, ctx));
+    return withSecurityHeaders(await handler.fetch(request, env, ctx), url.pathname);
   },
 };
 

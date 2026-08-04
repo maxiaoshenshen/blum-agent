@@ -83,6 +83,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={`${notoSans.variable} ${plexMono.variable}`}>
+        <a className="skip-link" href="#workspace">
+          跳转到主内容
+        </a>
         {children}
       </body>
     </html>

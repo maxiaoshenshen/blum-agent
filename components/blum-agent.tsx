@@ -89,16 +89,49 @@ function HelpOverlay({ onClose }: { onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    const closeButton = panelRef.current?.querySelector<HTMLButtonElement>("button");
+    closeButton?.focus();
+
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
+  function trapFocus(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      panelRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   return (
     <div className="help-overlay-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="help-overlay-panel" ref={panelRef} role="dialog" aria-label="使用帮助">
+      <div
+        aria-labelledby="help-dialog-title"
+        aria-modal="true"
+        className="help-overlay-panel"
+        id="help-dialog"
+        onKeyDown={trapFocus}
+        ref={panelRef}
+        role="dialog"
+      >
         <div className="help-overlay-header">
-          <h2>使用帮助</h2>
+          <h2 id="help-dialog-title">使用帮助</h2>
           <button className="help-close-btn" onClick={onClose} type="button" aria-label="关闭帮助">
             <X aria-hidden="true" size={20} />
           </button>
@@ -149,6 +182,7 @@ export function BlumAgent() {
   const [copiedSourceId, setCopiedSourceId] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<"online" | "reconnecting">("online");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const helpTriggerRef = useRef<HTMLButtonElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
   const requestVersionRef = useRef(0);
@@ -437,7 +471,7 @@ export function BlumAgent() {
       }
     }
   }
-function startNewConversation() {
+  function startNewConversation() {
     requestVersionRef.current += 1;
     activeRequestRef.current?.abort();
     activeRequestRef.current = null;
@@ -451,9 +485,17 @@ function startNewConversation() {
     inputRef.current?.focus();
   }
 
+  function closeHelp() {
+    setShowHelp(false);
+    helpTriggerRef.current?.focus();
+  }
+
   return (
-    <main className="agent-shell">
-      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+    <main className="agent-shell" id="workspace">
+      {showHelp && <HelpOverlay onClose={closeHelp} />}
+      <p aria-live="polite" className="sr-only" role="status">
+        {copiedSourceId ? "资料链接已复制到剪贴板" : ""}
+      </p>
       <h1 className="sr-only">Blum Agent 百隆五金智能工作台</h1>
       <header className="topbar">
         <a className="brand" href="#workspace" aria-label="Blum Agent 首页">
@@ -468,9 +510,12 @@ function startNewConversation() {
         <div className="topbar-actions">
           <button
             className="help-button"
+            aria-controls="help-dialog"
+            aria-expanded={showHelp}
+            aria-label="打开使用帮助"
             onClick={() => setShowHelp(true)}
+            ref={helpTriggerRef}
             type="button"
-            aria-label="帮助"
           >
             <CircleHelp aria-hidden="true" size={17} />
           </button>
@@ -489,19 +534,20 @@ function startNewConversation() {
         </div>
       </header>
 
-      <div className="workspace" id="workspace">
+      <div className="workspace">
         <aside className="role-panel" aria-label="角色与产品导航">
           <section>
             <div className="section-label">
               <span>01</span>
               选择你的角色
             </div>
-            <div className="role-list">
+            <div aria-label="选择你的角色" className="role-list" role="group">
               {ROLES.map((role) => {
                 const Icon = roleIcons[role.id];
                 const selected = role.id === roleId;
                 return (
                   <button
+                    aria-label={`切换至${role.label}角色`}
                     aria-pressed={selected}
                     className="role-button"
                     key={role.id}
@@ -544,6 +590,7 @@ function startNewConversation() {
 
         <section className="conversation-panel" aria-label="Blum Agent 对话">
           <div
+            aria-busy={isLoading}
             className="conversation-scroll"
             aria-live="polite"
             aria-label="与 Blum Agent 的对话记录"
@@ -642,7 +689,7 @@ function startNewConversation() {
                           </span>
                         ) : null}
                       </div>
-                      <p className="answer-text">
+                      <p className="answer-text" id={`answer-content-${message.id}`}>
                         {message.content.length > 500 && !expandedMessageIds.has(message.id)
                           ? `${message.content.slice(0, 500)}…`
                           : message.content}
@@ -652,6 +699,7 @@ function startNewConversation() {
                       </p>
                       {message.content.length > 500 ? (
                         <button
+                          aria-controls={`answer-content-${message.id}`}
                           aria-expanded={expandedMessageIds.has(message.id)}
                           className="answer-toggle"
                           onClick={() => setExpandedMessageIds((current) => {
@@ -721,7 +769,7 @@ function startNewConversation() {
                   ),
                 )}
                 {isLoading ? (
-                  <div className="thinking" role="status">
+                  <div aria-live="polite" className="thinking" role="status">
                     <LoaderCircle aria-hidden="true" size={17} />
                     <span className="thinking-text">正在检索 Blum 资料并组织答案</span>
                     <span className="thinking-dots" aria-hidden="true" />
@@ -792,31 +840,23 @@ function startNewConversation() {
               <div className="composer-actions">
                 <label
                   className={`attach-button${isUploading ? " uploading" : ""}`}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      event.currentTarget.querySelector<HTMLInputElement>("input")?.click();
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
                 >
                   <ImagePlus aria-hidden="true" size={18} />
                   <span>添加现场图片</span>
                   <input
                     accept="image/jpeg,image/png,image/webp"
-                    aria-label="添加现场图片"
+                    disabled={isUploading || isLoading}
                     onChange={(event) => {
                       handleAttachment(event.target.files?.[0]);
                       event.currentTarget.value = "";
                     }}
                     type="file"
-                    tabIndex={-1}
                   />
                 </label>
                 <button
                   className="send-button"
                   disabled={isLoading || !draft.trim()}
+                  aria-label={isLoading ? "正在发送问题" : "发送问题"}
                   type="submit"
                 >
                   <span>发送问题</span>

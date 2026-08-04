@@ -56,6 +56,42 @@ afterEach(() => {
 });
 
 describe("Blum Agent workspace", () => {
+  it("provides descriptive labels and relationships for interactive controls", () => {
+    render(<BlumAgent />);
+
+    expect(screen.getByRole("button", { name: "切换至设计师角色" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "发送问题" })).toHaveAttribute(
+      "aria-label",
+      "发送问题",
+    );
+    expect(screen.getByRole("button", { name: "打开使用帮助" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("traps focus in the help dialog and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    render(<BlumAgent />);
+    const trigger = screen.getByRole("button", { name: "打开使用帮助" });
+
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "使用帮助" });
+    const closeButton = screen.getByRole("button", { name: "关闭帮助" });
+
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(closeButton).toHaveFocus();
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("switches roles and loads a role-specific starter question", async () => {
     const user = userEvent.setup();
     render(<BlumAgent />);

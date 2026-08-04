@@ -3,7 +3,7 @@
 :root {
   --ink: #191a17;
   --ink-soft: #3f403b;
-  --muted: #737269;
+  --muted: #66655e;
   --line: #d5d1c5;
   --line-strong: #b6b0a1;
   --paper: #f8f6ef;
@@ -63,9 +63,11 @@ button {
 button:focus-visible,
 a:focus-visible,
 textarea:focus-visible,
+input:focus-visible,
 label:focus-within {
-  outline: 3px solid rgba(239, 86, 31, 0.32);
-  outline-offset: 2px;
+  outline: 3px solid #a5310b;
+  outline-offset: 3px;
+  transition: outline-color 160ms ease, outline-offset 160ms ease;
 }
 
 .sr-only {
@@ -78,6 +80,25 @@ label:focus-within {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 200;
+  top: 12px;
+  left: 12px;
+  padding: 10px 14px;
+  transform: translateY(-160%);
+  border: 2px solid var(--ink);
+  background: var(--white);
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 160ms ease, outline-color 160ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 .agent-shell {
@@ -944,7 +965,21 @@ label:focus-within {
 
 .send-button:disabled {
   cursor: not-allowed;
-  opacity: 0.42;
+  border-color: #8b8a81;
+  background: #d7d5cc;
+  color: #55564f;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .composer-meta {
