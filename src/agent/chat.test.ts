@@ -196,6 +196,38 @@ describe("Blum chat orchestration", () => {
 
     expect(response.answer).toContain("建议用中文提问");
   });
+
+  it("keeps prior turns in the system conversation brief for a product follow-up", async () => {
+    const requestCompletion = vi.fn(async () => "CLIP top BLUMOTION 是 Blum 铰链系列。");
+    await answerChat(
+      {
+        role: "designer",
+        messages: [
+          { role: "user", content: "我在厨房高柜使用 CLIP top BLUMOTION" },
+          { role: "assistant", content: "请确认门板形式。" },
+          { role: "user", content: "这个铰链适合什么门板？" },
+        ],
+      },
+      { providerConfig: { apiKey: "test-secret", baseUrl: "https://provider.example", model: "claude-opus-5" }, requestCompletion },
+    );
+
+    expect(requestCompletion.mock.calls[0]?.[0].systemPrompt).toContain(
+      "[用户] 我在厨房高柜使用 CLIP top BLUMOTION",
+    );
+  });
+
+  it("instructs the model to disclose a missing direct knowledge match", async () => {
+    const requestCompletion = vi.fn(async () => "这个问题超出了当前知识范围，但我可以尝试从通用角度回答。请提供产品标识。");
+    await answerChat(
+      { role: "consumer", messages: [{ role: "user", content: "Blum 的月球柜门应该怎样维护？" }] },
+      { providerConfig: { apiKey: "test-secret", baseUrl: "https://provider.example", model: "claude-opus-5" }, requestCompletion },
+    );
+
+    expect(requestCompletion).toHaveBeenCalledOnce();
+    expect(requestCompletion.mock.calls[0]?.[0].systemPrompt).toContain(
+      "当前检索没有找到与问题直接匹配的官方资料",
+    );
+  });
 });
 
 describe("provider environment validation", () => {

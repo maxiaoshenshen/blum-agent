@@ -182,7 +182,12 @@ export async function answerChat(
     .reverse()
     .find((message) => message.role === "user")!.content;
   const risk = classifyRisk(question);
-  const isInServiceScope = isBlumRelated(question) || risk === "precision";
+  const conversationText = request.messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content)
+    .join("\n");
+  const isInServiceScope =
+    isBlumRelated(question) || isBlumRelated(conversationText) || risk === "precision";
   if (!isInServiceScope && dependencies.providerConfig) {
     return {
       answer: outOfScopeAnswer(),
@@ -193,6 +198,15 @@ export async function answerChat(
     };
   }
   const matches = retrieveKnowledge(question);
+  const hasDirectKnowledgeMatch = matches.some(
+    (match) =>
+      match.score > 0 &&
+      match.matchedKeywords.some(
+        (keyword) =>
+          keyword.replace(/[\s-]/g, "").length > 2 &&
+          !["blum", "百隆", "五金", "家具", "柜门"].includes(keyword.toLowerCase()),
+      ),
+  );
   const sources = matches.map(({ source }) => toSourceReference(source));
   const confidence: ConfidenceLevel =
     risk === "precision" ? "needs-review" : "guided";
@@ -224,6 +238,8 @@ export async function answerChat(
       role: getRole(request.role),
       matches,
       risk,
+      conversationHistory: request.messages,
+      knowledgeCoverage: hasDirectKnowledgeMatch ? "direct" : "none",
     }),
     messages: request.messages,
     image: request.image,

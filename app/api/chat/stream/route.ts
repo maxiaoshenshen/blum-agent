@@ -134,9 +134,24 @@ export async function POST(request: Request): Promise<Response> {
     .reverse()
     .find((m) => m.role === "user")!.content;
   const matches = retrieveKnowledge(question);
+  const hasDirectKnowledgeMatch = matches.some(
+    (match) =>
+      match.score > 0 &&
+      match.matchedKeywords.some(
+        (keyword) =>
+          keyword.replace(/[\s-]/g, "").length > 2 &&
+          !["blum", "百隆", "五金", "家具", "柜门"].includes(keyword.toLowerCase()),
+      ),
+  );
   const risk = classifyRisk(question);
   const role = getRole(parsed.role);
-  const systemPrompt = buildSystemPrompt({ role, matches, risk });
+  const systemPrompt = buildSystemPrompt({
+    role,
+    matches,
+    risk,
+    conversationHistory: parsed.messages,
+    knowledgeCoverage: hasDirectKnowledgeMatch ? "direct" : "none",
+  });
   const sources = matches.map(({ source }: { source: OfficialSource }) => ({
     id: source.id,
     title: source.title,

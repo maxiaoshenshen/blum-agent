@@ -57,6 +57,11 @@ const confidenceLabels: Record<ConfidenceLevel, string> = {
   "needs-review": "下单 / 加工前复核",
 };
 
+const REQUEST_TIMEOUT_MS = 60_000;
+const RECONNECT_DELAY_MS = 3_000;
+const TIMEOUT_MESSAGE = "这个问题比较复杂，模型正在深入分析，请稍后重试或简化问题";
+const IMAGE_READ_ERROR_MESSAGE = "图片无法识别，请尝试重新上传或描述问题文字";
+
 interface Attachment {
   dataUrl: string;
   name: string;
@@ -287,7 +292,7 @@ export function BlumAgent() {
     reader.addEventListener("load", () => {
       if (typeof reader.result !== "string") {
         setIsUploading(false);
-        setError("无法读取这张图片，请换一张重试。");
+        setError(IMAGE_READ_ERROR_MESSAGE);
         return;
       }
       setIsUploading(false);
@@ -296,7 +301,7 @@ export function BlumAgent() {
     });
     reader.addEventListener("error", () => {
       setIsUploading(false);
-      setError("无法读取这张图片，请换一张重试。");
+      setError(IMAGE_READ_ERROR_MESSAGE);
     });
     reader.readAsDataURL(file);
   }
@@ -334,136 +339,106 @@ export function BlumAgent() {
     };
     setMessages((current) => [...current, placeholderMessage]);
 
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
+    const restoreQuestion = (message: string, reconnecting = false) => {
+      setMessages((current) =>
+        current.filter((m) => m.id !== userMessage.id && m.id !== streamingMsgId),
+      );
+      setDraft(question);
+      setError(message);
+      setConnectionState(reconnecting ? "reconnecting" : "online");
+    };
+
     try {
-      // Try SSE streaming first
-      const response = await fetch("/api/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          role: roleId,
-          messages: apiMessages(nextMessages),
-          image: attachment?.dataUrl,
-        }),
-        signal: controller.signal,
-      });
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetch("/api/chat/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ role: roleId, messages: apiMessages(nextMessages), image: attachment?.dataUrl }),
+            signal: controller.signal,
+          });
+          if (!response.ok || !response.body) throw new Error("Stream unavailable");
 
-      if (!response.ok || !response.body) {
-        throw new Error("Stream unavailable");
-      }
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let completed = false;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (requestVersion !== requestVersionRef.current) { await reader.cancel(); return; }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (let i = 0; i < lines.length; i += 1) {
+              const trimmed = lines[i].trim();
+              if (!trimmed || !trimmed.startsWith("event: ")) continue;
+              const nextLine = lines[i + 1];
+              if (!nextLine?.startsWith("data: ")) continue;
+              i += 1;
+              let data: Record<string, unknown>;
+              try { data = JSON.parse(nextLine.slice(6).trim()) as Record<string, unknown>; } catch { continue; }
+              const eventName = trimmed.slice(7).trim();
+              if (eventName === "start") {
+                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, sources: data.sources as SourceReference[] } : m));
+              } else if (eventName === "chunk") {
+                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: m.content + String(data.text ?? "") } : m));
+              } else if (eventName === "done") {
+                completed = true;
+                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: String(data.answer ?? ""), confidence: data.confidence as ConfidenceLevel, followUps: data.followUps as string[], mode: "live", sources: data.sources as SourceReference[] } : m));
+              } else if (eventName === "error") {
+                throw new Error(String(data.message ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。"));
+              }
+            }
+          }
+          if (!completed) throw new Error("Stream ended without completion event");
+          setAttachment(null);
+          setConnectionState("online");
+          return;
+        } catch (streamError) {
+          if (requestVersion !== requestVersionRef.current) return;
+          if (timedOut) { restoreQuestion(TIMEOUT_MESSAGE); return; }
+          if (streamError instanceof DOMException && streamError.name === "AbortError") return;
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      const scrollToBottom = () => {
-        const container = conversationRef.current;
-        if (container) container.scrollTop = container.scrollHeight;
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (requestVersion !== requestVersionRef.current) { reader.cancel(); return; }
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (let i = 0; i < lines.length; i++) {
-          const trimmed = lines[i].trim();
-          if (!trimmed || !trimmed.startsWith("event: ")) continue;
-          const eventName = trimmed.slice(7).trim();
-          const nextLine = lines[i + 1];
-          if (!nextLine?.startsWith("data: ")) continue;
-          i++;
-          let data;
-          try { data = JSON.parse(nextLine.slice(6).trim()); }
-          catch { continue; }
-          if (eventName === "start") {
-            setMessages((current) =>
-              current.map((m) => m.id === streamingMsgId ? { ...m, sources: data.sources as SourceReference[] } : m),
-            );
-          } else if (eventName === "chunk") {
-            setMessages((current) =>
-              current.map((m) => m.id === streamingMsgId ? { ...m, content: m.content + (data.text as string) } : m),
-            );
-            scrollToBottom();
-          } else if (eventName === "done") {
-            setMessages((current) =>
-              current.map((m) => m.id === streamingMsgId ? {
-                ...m,
-                content: data.answer as string,
-                confidence: data.confidence as ConfidenceLevel,
-                followUps: data.followUps as string[],
-                mode: "live" as const,
-                sources: data.sources as SourceReference[],
-              } : m),
-            );
-          } else if (eventName === "error") {
-            throw new Error((data.message as string) ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。");
+          try {
+            const fallbackResponse = await fetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ role: roleId, messages: apiMessages(nextMessages), image: attachment?.dataUrl }),
+              signal: controller.signal,
+            });
+            const body = (await fallbackResponse.json()) as { answer?: string; error?: { message?: string }; sources?: SourceReference[]; confidence?: ConfidenceLevel; followUps?: string[]; mode?: "live" | "demo" | "guarded" };
+            if (!fallbackResponse.ok || !("answer" in body)) {
+              restoreQuestion(body.error?.message ?? "暂时无法获得回答，请稍后重试。", true);
+              return;
+            }
+            setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: body.answer as string, confidence: body.confidence ?? "guided", followUps: body.followUps ?? [], mode: body.mode ?? "live", sources: body.sources ?? [] } : m));
+            setAttachment(null);
+            setConnectionState("online");
+            return;
+          } catch (fallbackError) {
+            if (requestVersion !== requestVersionRef.current) return;
+            if (timedOut) { restoreQuestion(TIMEOUT_MESSAGE); return; }
+            if (fallbackError instanceof DOMException && fallbackError.name === "AbortError") return;
+            if (attempt === 0) {
+              setConnectionState("reconnecting");
+              await new Promise<void>((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
+              continue;
+            }
+            restoreQuestion("暂时无法连接服务，请检查网络后重试。", true);
+            return;
           }
         }
       }
-
-      if (requestVersion !== requestVersionRef.current) return;
-      setAttachment(null);
-      isStreamingRef.current = false;
-      setConnectionState("online");
-    } catch (caught) {
-      // Don't handle abort or stale requests
-      if (requestVersion !== requestVersionRef.current || (caught instanceof DOMException && caught.name === "AbortError")) return;
-      isStreamingRef.current = false;
-
-      // Fall back to non-streaming JSON endpoint
-      const fallbackResponse = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          role: roleId,
-          messages: apiMessages(nextMessages),
-          image: attachment?.dataUrl,
-        }),
-        signal: controller.signal,
-      });
-
-      const body = (await fallbackResponse.json()) as {
-        answer?: string;
-        error?: { message?: string };
-        sources?: SourceReference[];
-        confidence?: ConfidenceLevel;
-        followUps?: string[];
-        mode?: "live" | "demo" | "guarded";
-      };
-
-      if (!fallbackResponse.ok || !("answer" in body)) {
-        setMessages((current) =>
-          current.filter((m) => m.id !== userMessage.id && m.id !== streamingMsgId),
-        );
-        setDraft(question);
-        setError(
-          "error" in body && body.error?.message
-            ? body.error.message
-            : "暂时无法获得回答，请稍后重试。",
-        );
-        setConnectionState("reconnecting");
-        return;
-      }
-
-      setMessages((current) =>
-        current.map((m) =>
-          m.id === streamingMsgId
-            ? {
-                ...m,
-                content: body.answer as string,
-                confidence: (body.confidence ?? "guided") as ConfidenceLevel,
-                followUps: (body.followUps ?? []) as string[],
-                mode: (body.mode ?? "live") as "live" | "demo" | "guarded",
-                sources: (body.sources ?? []) as SourceReference[],
-              }
-            : m,
-        ),
-      );
-      setAttachment(null);
-      setConnectionState("online");
     } finally {
+      window.clearTimeout(timeout);
+      isStreamingRef.current = false;
       if (requestVersion === requestVersionRef.current) {
         setIsLoading(false);
         activeRequestRef.current = null;
@@ -771,7 +746,11 @@ export function BlumAgent() {
                 {isLoading ? (
                   <div aria-live="polite" className="thinking" role="status">
                     <LoaderCircle aria-hidden="true" size={17} />
-                    <span className="thinking-text">正在检索 Blum 资料并组织答案</span>
+                    <span className="thinking-text">
+                      {connectionState === "reconnecting"
+                        ? "正在重新连接..."
+                        : "正在检索 Blum 资料并组织答案"}
+                    </span>
                     <span className="thinking-dots" aria-hidden="true" />
                   </div>
                 ) : null}
