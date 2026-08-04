@@ -136,6 +136,35 @@ describe("provider adapter", () => {
     });
   });
 
+  it("never forwards private reasoning chunks to streaming consumers", async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const content of ["<think>private reasoning", " that must stay hidden</think>", "请先确认铰链型号。"] as const) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`));
+        }
+        controller.close();
+      },
+    });
+    const fetchImpl = vi.fn<FetchImplementation>(async () => new Response(stream));
+    const chunks: string[] = [];
+
+    const answer = await requestChatCompletion(
+      {
+        config,
+        systemPrompt: "system",
+        messages: [{ role: "user", content: "如何调节？" }],
+      },
+      fetchImpl,
+      (chunk) => { chunks.push(chunk); },
+    );
+
+    expect(answer).toBe("请先确认铰链型号。");
+    expect(chunks.join("")).toBe("请先确认铰链型号。");
+    expect(chunks.join("")).not.toContain("think");
+    expect(chunks.join("")).not.toContain("private reasoning");
+  });
+
   it("passes an image on the latest user turn", async () => {
     const fetchImpl = vi.fn<FetchImplementation>(
       async () =>
@@ -267,5 +296,27 @@ describe("provider adapter", () => {
 
     expect(answer.length).toBeLessThanOrEqual(12_020);
     expect(answer.endsWith("（回答过长，已截断）")).toBe(true);
+  });
+
+  it("sanitizes oversized streamed output before applying its length limit", async () => {
+    const encoder = new TextEncoder();
+    const privateReasoning = "private ".repeat(2_000);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `<think>${privateReasoning}</think>安全答案。` } }] })}\n\n`));
+        controller.close();
+      },
+    });
+    const fetchImpl = vi.fn<FetchImplementation>(async () => new Response(stream));
+
+    const answer = await requestChatCompletion(
+      { config, systemPrompt: "system", messages: [{ role: "user", content: "测试" }] },
+      fetchImpl,
+      () => undefined,
+    );
+
+    expect(answer).toBe("安全答案。");
+    expect(answer).not.toContain("private");
+    expect(answer).not.toContain("think");
   });
 });

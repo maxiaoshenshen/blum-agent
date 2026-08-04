@@ -201,6 +201,7 @@ export async function requestChatCompletion(
         const decoder = new TextDecoder();
         let buffer = "";
         let finalText = "";
+        let emittedText = "";
         let completed = false;
         try {
           while (true) {
@@ -226,7 +227,16 @@ export async function requestChatCompletion(
                 const content = parsed.choices?.[0]?.delta?.content;
                 if (typeof content === "string" && content.length > 0) {
                   finalText += content;
-                  await onChunk(content);
+                  // Provider tokens are not safe to expose verbatim: some
+                  // compatible APIs emit private reasoning before the visible
+                  // answer. Sanitize the accumulated output first, then only
+                  // forward a monotonic safe suffix to the SSE consumer.
+                  const safeText = sanitizeModelText(finalText);
+                  if (safeText.startsWith(emittedText)) {
+                    const safeChunk = safeText.slice(emittedText.length);
+                    if (safeChunk) await onChunk(safeChunk);
+                    emittedText = safeText;
+                  }
                 }
               } catch {
                 // ignore malformed chunk
@@ -248,9 +258,6 @@ export async function requestChatCompletion(
             502,
           );
         }
-        if (finalText.length > MAX_OUTPUT_CHARACTERS) {
-          return `${finalText.slice(0, MAX_OUTPUT_CHARACTERS).trimEnd()}\n\n（回答过长，已截断）`;
-        }
         const sanitized = sanitizeModelText(finalText);
         if (!sanitized) {
           throw new ProviderError(
@@ -258,6 +265,9 @@ export async function requestChatCompletion(
             "模型没有生成可显示的答案，请重新提问。",
             502,
           );
+        }
+        if (sanitized.length > MAX_OUTPUT_CHARACTERS) {
+          return `${sanitized.slice(0, MAX_OUTPUT_CHARACTERS).trimEnd()}\n\n（回答过长，已截断）`;
         }
         return sanitized;
       }

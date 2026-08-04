@@ -51,6 +51,19 @@ describe("Blum Agent system prompt", () => {
     expect(prompt).toContain("通用角度");
   });
 
+  it("keeps the no-coverage instruction in English for English conversations", () => {
+    const prompt = buildSystemPrompt({
+      role: getRole("consumer"),
+      matches: [],
+      risk: "standard",
+      knowledgeCoverage: "none",
+      locale: "en",
+    });
+
+    expect(prompt).toContain("The first sentence must say");
+    expect(prompt).not.toContain("第一句必须是“这个问题超出了当前知识范围");
+  });
+
   it.each([
     ["designer", "结构化、技术参数化、图纸友好"],
     ["sales", "卖点清晰、对比简洁、成交导向"],

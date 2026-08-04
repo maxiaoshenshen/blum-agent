@@ -51,6 +51,19 @@ describe("deterministic model grounding gate", () => {
     ).toBe(true);
   });
 
+  it("rejects verification guidance when no official source was retrieved", () => {
+    expect(isGroundedModelAnswer("建议查阅官方资料确认。", [])).toBe(false);
+  });
+
+  it("rejects unsupported product assertions hidden inside verification guidance", () => {
+    expect(
+      isGroundedModelAnswer(
+        "MERIVOBOX 适合户外使用，建议查阅官方目录确认。",
+        [merivoboxSource],
+      ),
+    ).toBe(false);
+  });
+
   it("accepts a natural explanation composed only from official BLUMOTION facts", () => {
     expect(
       isGroundedModelAnswer(

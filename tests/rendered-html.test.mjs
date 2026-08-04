@@ -76,7 +76,8 @@ test("serves the built chat API with a safe demo contract", async () => {
   assert.equal(response.headers.get("cache-control"), "no-store, max-age=0");
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(body.mode, "demo");
-  assert.equal(body.sources[0].id, "motion-technologies");
+  assert.equal(body.sources[0].official, true);
+  assert.match(body.sources[0].url, /^https:\/\//);
   assert.match(body.answer, /演示模式/);
 });
 
