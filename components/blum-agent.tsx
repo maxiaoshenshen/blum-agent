@@ -18,6 +18,7 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   ChevronRight,
+  CircleHelp,
   CircleUserRound,
   DraftingCompass,
   Factory,
@@ -82,6 +83,56 @@ function apiMessages(messages: TimelineMessage[]): ChatMessage[] {
     .slice(-11);
 }
 
+
+function HelpOverlay({ onClose }: { onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="help-overlay-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="help-overlay-panel" ref={panelRef} role="dialog" aria-label="使用帮助">
+        <div className="help-overlay-header">
+          <h2>使用帮助</h2>
+          <button className="help-close-btn" onClick={onClose} type="button" aria-label="关闭帮助">
+            <X aria-hidden="true" size={20} />
+          </button>
+        </div>
+        <div className="help-overlay-body">
+          <section>
+            <h3>键盘快捷键</h3>
+            <div className="shortcut-list">
+              <div className="shortcut-row"><kbd>Enter</kbd><span>发送问题</span></div>
+              <div className="shortcut-row"><kbd>Shift+Enter</kbd><span>换行</span></div>
+              <div className="shortcut-row"><kbd>Ctrl+Enter</kbd><span>发送（额外快捷方式）</span></div>
+              <div className="shortcut-row"><kbd>Esc</kbd><span>清空输入框并聚焦</span></div>
+              <div className="shortcut-row"><kbd>1</kbd><span>–</span><kbd>6</kbd><span>快速切换角色</span></div>
+              <div className="shortcut-row"><kbd>?</kbd><span>打开帮助面板</span></div>
+            </div>
+          </section>
+          <section>
+            <h3>使用提示</h3>
+            <div className="help-tip"><h4>角色切换</h4><p>选择不同角色，Blum Agent 会以对应视角回答问题。设计师关注尺寸与配合；销售关注卖点与对比；安装人员关注安装步骤与工具。</p></div>
+            <div className="help-tip"><h4>上传图片辅助分析</h4><p>点击左下角的图片按钮上传现场照片，Blum Agent 会结合图片内容给出更准确的建议。支持 JPG、PNG、WebP，单张不超过 5 MB。</p></div>
+            <div className="help-tip"><h4>精确选型模式</h4><p>当需要具体型号、承重参数、孔位规格时，Blum Agent 会主动进入安全复核模式（guarded），确保答案来自官方资料。下单前请以最新官方资料复核。</p></div>
+          </section>
+          <section>
+            <h3>信息来源说明</h3>
+            <div className="help-tip help-sources-note">
+              <p>Blum Agent 基于 Blum 官方资料（产品目录、技术文档、安装指南等）回答问题。每个回答底部会列出参考的官方资料链接，供你直接查阅。</p>
+              <p>当系统显示「下单 / 加工前复核」时，表示当前信息可能因产品批次、地区差异或标准更新而存在不确定性，请务必以官方最新资料确认后再行动。</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BlumAgent() {
   const [roleId, setRoleId] = useState<RoleId>("consumer");
   const [draft, setDraft] = useState("");
@@ -89,10 +140,14 @@ export function BlumAgent() {
   const [messages, setMessages] = useState<TimelineMessage[]>([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
   const requestVersionRef = useRef(0);
+  const streamingMessageIdRef = useRef<string | null>(null);
+  const isStreamingRef = useRef(false);
 
   const selectedRole = useMemo(
     () => ROLES.find((role) => role.id === roleId)!,
@@ -102,7 +157,35 @@ export function BlumAgent() {
   useEffect(() => {
     const container = conversationRef.current;
     if (container) container.scrollTop = container.scrollHeight;
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isStreamingRef.current]);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      const isInputFocused = target.tagName === "TEXTAREA" || target.tagName === "INPUT";
+
+      if (e.key === "Escape") {
+        if (showHelp) { setShowHelp(false); return; }
+        if (draft || attachment) { setDraft(""); setAttachment(null); setError(""); inputRef.current?.focus(); }
+        return;
+      }
+      if (e.key === "?" && !isInputFocused) { setShowHelp(true); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (!isLoading && draft.trim()) void submitQuestion();
+        return;
+      }
+      if (!isInputFocused && !isLoading) {
+        const keyNum = parseInt(e.key, 10);
+        if (keyNum >= 1 && keyNum <= 6) {
+          const role = ROLES[keyNum - 1];
+          if (role) { setRoleId(role.id); setError(""); }
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [draft, attachment, isLoading, showHelp, roleId]);
 
   function chooseStarter(prompt: string) {
     setDraft(prompt);
@@ -123,16 +206,20 @@ export function BlumAgent() {
       return;
     }
 
+    setIsUploading(true);
     const reader = new FileReader();
     reader.addEventListener("load", () => {
       if (typeof reader.result !== "string") {
+        setIsUploading(false);
         setError("无法读取这张图片，请换一张重试。");
         return;
       }
+      setIsUploading(false);
       setAttachment({ dataUrl: reader.result, name: file.name });
       setError("");
     });
     reader.addEventListener("error", () => {
+      setIsUploading(false);
       setError("无法读取这张图片，请换一张重试。");
     });
     reader.readAsDataURL(file);
@@ -153,14 +240,25 @@ export function BlumAgent() {
     setDraft("");
     setError("");
     setIsLoading(true);
+    isStreamingRef.current = true;
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
     const controller = new AbortController();
     activeRequestRef.current?.abort();
     activeRequestRef.current = controller;
 
+    const streamingMsgId = createId();
+    streamingMessageIdRef.current = streamingMsgId;
+    const placeholderMessage: TimelineMessage = {
+      id: streamingMsgId,
+      role: "assistant",
+      content: "",
+    };
+    setMessages((current) => [...current, placeholderMessage]);
+
     try {
-      const response = await fetch("/api/chat", {
+      // Try SSE streaming first
+      const response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -170,57 +268,129 @@ export function BlumAgent() {
         }),
         signal: controller.signal,
       });
-      const body = (await response.json()) as
-        | ChatAnswer
-        | { error?: { message?: string } };
 
-      if (!response.ok || !("answer" in body)) {
-        throw new Error(
+      if (!response.ok || !response.body) {
+        throw new Error("Stream unavailable");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const scrollToBottom = () => {
+        const container = conversationRef.current;
+        if (container) container.scrollTop = container.scrollHeight;
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (requestVersion !== requestVersionRef.current) { reader.cancel(); return; }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (let i = 0; i < lines.length; i++) {
+          const trimmed = lines[i].trim();
+          if (!trimmed || !trimmed.startsWith("event: ")) continue;
+          const eventName = trimmed.slice(7).trim();
+          const nextLine = lines[i + 1];
+          if (!nextLine?.startsWith("data: ")) continue;
+          i++;
+          let data;
+          try { data = JSON.parse(nextLine.slice(6).trim()); }
+          catch { continue; }
+          if (eventName === "start") {
+            setMessages((current) =>
+              current.map((m) => m.id === streamingMsgId ? { ...m, sources: data.sources as SourceReference[] } : m),
+            );
+          } else if (eventName === "chunk") {
+            setMessages((current) =>
+              current.map((m) => m.id === streamingMsgId ? { ...m, content: m.content + (data.text as string) } : m),
+            );
+            scrollToBottom();
+          } else if (eventName === "done") {
+            setMessages((current) =>
+              current.map((m) => m.id === streamingMsgId ? {
+                ...m,
+                content: data.answer as string,
+                confidence: data.confidence as ConfidenceLevel,
+                followUps: data.followUps as string[],
+                mode: "live" as const,
+                sources: data.sources as SourceReference[],
+              } : m),
+            );
+          } else if (eventName === "error") {
+            throw new Error((data.message as string) ?? "Blum Agent 暂时无法处理这个问题，请稍后重试。");
+          }
+        }
+      }
+
+      if (requestVersion !== requestVersionRef.current) return;
+      setAttachment(null);
+      isStreamingRef.current = false;
+    } catch (caught) {
+      // Don't handle abort or stale requests
+      if (requestVersion !== requestVersionRef.current || (caught instanceof DOMException && caught.name === "AbortError")) return;
+      isStreamingRef.current = false;
+
+      // Fall back to non-streaming JSON endpoint
+      const fallbackResponse = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: roleId,
+          messages: apiMessages(nextMessages),
+          image: attachment?.dataUrl,
+        }),
+        signal: controller.signal,
+      });
+
+      const body = (await fallbackResponse.json()) as {
+        answer?: string;
+        error?: { message?: string };
+        sources?: SourceReference[];
+        confidence?: ConfidenceLevel;
+        followUps?: string[];
+        mode?: "live" | "demo" | "guarded";
+      };
+
+      if (!fallbackResponse.ok || !("answer" in body)) {
+        setMessages((current) =>
+          current.filter((m) => m.id !== userMessage.id && m.id !== streamingMsgId),
+        );
+        setDraft(question);
+        setError(
           "error" in body && body.error?.message
             ? body.error.message
             : "暂时无法获得回答，请稍后重试。",
         );
-      }
-
-      if (requestVersion !== requestVersionRef.current) return;
-      setMessages((current) => [
-        ...current,
-        {
-          id: createId(),
-          role: "assistant",
-          content: body.answer,
-          confidence: body.confidence,
-          followUps: body.followUps,
-          mode: body.mode,
-          sources: body.sources,
-        },
-      ]);
-      setAttachment(null);
-    } catch (caught) {
-      if (
-        requestVersion !== requestVersionRef.current ||
-        (caught instanceof DOMException && caught.name === "AbortError")
-      ) {
         return;
       }
+
       setMessages((current) =>
-        current.filter((message) => message.id !== userMessage.id),
+        current.map((m) =>
+          m.id === streamingMsgId
+            ? {
+                ...m,
+                content: body.answer as string,
+                confidence: (body.confidence ?? "guided") as ConfidenceLevel,
+                followUps: (body.followUps ?? []) as string[],
+                mode: (body.mode ?? "live") as "live" | "demo" | "guarded",
+                sources: (body.sources ?? []) as SourceReference[],
+              }
+            : m,
+        ),
       );
-      setDraft(question);
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "暂时无法获得回答，请稍后重试。",
-      );
+      setAttachment(null);
     } finally {
       if (requestVersion === requestVersionRef.current) {
         setIsLoading(false);
         activeRequestRef.current = null;
+        streamingMessageIdRef.current = null;
       }
     }
   }
-
-  function startNewConversation() {
+function startNewConversation() {
     requestVersionRef.current += 1;
     activeRequestRef.current?.abort();
     activeRequestRef.current = null;
@@ -229,11 +399,13 @@ export function BlumAgent() {
     setAttachment(null);
     setError("");
     setIsLoading(false);
+    isStreamingRef.current = false;
     inputRef.current?.focus();
   }
 
   return (
     <main className="agent-shell">
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       <h1 className="sr-only">Blum Agent 百隆五金智能工作台</h1>
       <header className="topbar">
         <a className="brand" href="#workspace" aria-label="Blum Agent 首页">
@@ -246,6 +418,14 @@ export function BlumAgent() {
           </span>
         </a>
         <div className="topbar-actions">
+          <button
+            className="help-button"
+            onClick={() => setShowHelp(true)}
+            type="button"
+            aria-label="帮助"
+          >
+            <CircleHelp aria-hidden="true" size={17} />
+          </button>
           <button
             className="new-chat-button"
             onClick={startNewConversation}
@@ -401,7 +581,12 @@ export function BlumAgent() {
                           </span>
                         ) : null}
                       </div>
-                      <p className="answer-text">{message.content}</p>
+                      <p className="answer-text">
+                        {message.content}
+                        {isStreamingRef.current && message.id === streamingMessageIdRef.current ? (
+                          <span className="streaming-cursor" aria-hidden="true">_</span>
+                        ) : null}
+                      </p>
                       {message.mode === "demo" ? (
                         <p className="demo-note">
                           当前未连接模型服务，以上为官方资料导航回答。
@@ -455,7 +640,8 @@ export function BlumAgent() {
                 {isLoading ? (
                   <div className="thinking" role="status">
                     <LoaderCircle aria-hidden="true" size={17} />
-                    正在检索 Blum 资料并组织答案…
+                    <span className="thinking-text">正在检索 Blum 资料并组织答案</span>
+                    <span className="thinking-dots" aria-hidden="true" />
                   </div>
                 ) : null}
               </div>
@@ -498,7 +684,7 @@ export function BlumAgent() {
                 maxLength={4000}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
                     event.preventDefault();
                     void submitQuestion();
                   }
@@ -509,7 +695,7 @@ export function BlumAgent() {
                 value={draft}
               />
               <div className="composer-actions">
-                <label className="attach-button">
+                <label className={`attach-button${isUploading ? " uploading" : ""}`}>
                   <ImagePlus aria-hidden="true" size={18} />
                   <span>添加现场图片</span>
                   <input

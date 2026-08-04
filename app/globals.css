@@ -709,6 +709,23 @@ label:focus-within {
   color: var(--signal-dark);
 }
 
+.streaming-cursor {
+  display: inline-block;
+  color: var(--signal);
+  font-weight: 700;
+  animation: blink 0.8s step-end infinite;
+  margin-left: 1px;
+}
+
+.message-streaming .answer-text {
+  min-height: 1.95em;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 .thinking {
   display: flex;
   width: fit-content;
@@ -1154,5 +1171,322 @@ label:focus-within {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================
+   Task 4 & 5: UI/UX Enhancements
+   ============================================ */
+
+/* --- Task 4.1: 表情光标闪烁动画（流式响应时） --- */
+@keyframes cursor-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.answer-text::after {
+  content: "_";
+  display: inline;
+  animation: cursor-blink 0.9s step-end infinite;
+  color: var(--signal);
+  font-weight: 300;
+}
+
+.answer-text:not(.answer-text-streaming)::after {
+  animation: none;
+  opacity: 0;
+}
+
+/* 流式输入时文字稍淡 */
+.answer-text.answer-text-streaming {
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* --- Task 4.2: 移动端角色横向滚动惯性 --- */
+.role-list {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* --- Task 4.3: 图片上传进度指示（attach-button 增强） --- */
+.attach-button.uploading {
+  pointer-events: none;
+  opacity: 0.7;
+  border-color: var(--signal);
+  color: var(--signal-dark);
+}
+
+.attach-button.uploading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(239, 86, 31, 0.18) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: upload-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes upload-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* --- Task 5.2: 用户消息气泡添加内阴影使其更立体 --- */
+.message-user {
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.25),
+    6px 6px 0 var(--signal);
+}
+
+/* --- Task 5.3: thinking 加载状态打字效果（三个点依次出现） --- */
+@keyframes thinking-dot-appear {
+  0% { opacity: 0; transform: translateY(2px); }
+  50% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-2px); }
+}
+
+.thinking-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  margin-left: 2px;
+}
+
+.thinking-dots::before,
+.thinking-dots::after,
+.thinking-dots {
+  content: "·";
+  font-size: 16px;
+  line-height: 1;
+  color: var(--signal-dark);
+  animation: thinking-dot-appear 1.2s ease-in-out infinite;
+}
+
+.thinking-dots::before {
+  animation-delay: 0s;
+}
+
+.thinking-dots {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots::after {
+  animation-delay: 0.4s;
+}
+
+/* 隐藏原有的静态 loading text 中的点（如果有的话），用 dots 代替 */
+.thinking-text::after {
+  display: none;
+}
+
+/* ============================================
+   Help Overlay Styles (Task 2)
+   ============================================ */
+
+.help-button {
+  display: inline-flex;
+  min-height: 36px;
+  width: 36px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-soft);
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.help-button:hover {
+  border-color: var(--signal);
+  color: var(--signal-dark);
+}
+
+.help-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(25, 26, 23, 0.48);
+  backdrop-filter: blur(4px);
+  animation: help-backdrop-in 200ms ease both;
+}
+
+@keyframes help-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.help-overlay-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 90vw);
+  background: var(--white);
+  border-left: 1px solid var(--ink);
+  box-shadow: -12px 0 48px rgba(25, 26, 23, 0.18);
+  display: flex;
+  flex-direction: column;
+  animation: help-panel-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  overflow: hidden;
+}
+
+@keyframes help-panel-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.help-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--ink);
+  flex-shrink: 0;
+}
+
+.help-overlay-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.help-close-btn {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted);
+  transition: color 160ms ease;
+}
+
+.help-close-btn:hover {
+  color: var(--ink);
+}
+
+.help-overlay-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.help-overlay-body section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.help-overlay-body section h3 {
+  margin: 0;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.shortcut-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+kbd {
+  display: inline-flex;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 1px 0 var(--line-strong);
+}
+
+kbd + kbd {
+  margin-left: 2px;
+}
+
+.shortcut-row span:not(:first-child) {
+  margin-left: 4px;
+}
+
+.help-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.help-tip h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.help-tip p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+
+.help-sources-note {
+  padding: 14px;
+  background: var(--paper-deep);
+  border: 1px solid var(--line);
+}
+
+.help-sources-note p {
+  font-size: 11px;
+}
+
+/* ============================================
+   Mobile adjustments for new elements
+   ============================================ */
+@media (max-width: 760px) {
+  .help-button {
+    min-height: 32px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .help-overlay-panel {
+    width: 100vw;
   }
 }

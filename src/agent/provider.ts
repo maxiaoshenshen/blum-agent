@@ -7,7 +7,9 @@ export interface ProviderConfig {
   model: string;
 }
 
-interface ProviderRequest {
+export type ChunkHandler = (text: string) => void | Promise<void>;
+
+export interface ProviderRequest {
   config: ProviderConfig;
   systemPrompt: string;
   messages: ChatMessage[];
@@ -95,6 +97,7 @@ function mapStatus(status: number): ProviderError {
 export async function requestChatCompletion(
   request: ProviderRequest,
   fetchImpl: FetchImplementation = fetch,
+  onChunk?: ChunkHandler,
 ): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -114,6 +117,7 @@ export async function requestChatCompletion(
         model: request.config.model,
         temperature: 0.2,
         max_tokens: 1800,
+        stream: Boolean(onChunk),
         messages: toProviderMessages(
           request.systemPrompt,
           request.messages,
@@ -138,6 +142,71 @@ export async function requestChatCompletion(
       if (!response.ok) {
         if (attempt === 0 && RETRYABLE_STATUSES.has(response.status)) continue;
         throw mapStatus(response.status);
+      }
+
+      if (onChunk) {
+        const streamBody = response.body;
+        if (!streamBody) {
+          throw new ProviderError(
+            "invalid_response",
+            "模型返回了无法识别的结果，请重新提问。",
+            502,
+          );
+        }
+        const reader = streamBody.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let finalText = "";
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith("data: ")) continue;
+              const data = trimmed.slice(6).trim();
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data) as {
+                  choices?: Array<{
+                    delta?: { content?: string };
+                  }>;
+                };
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (typeof content === "string" && content.length > 0) {
+                  finalText += content;
+                  await onChunk(content);
+                }
+              } catch {
+                // ignore malformed chunk
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        if (!finalText.trim()) {
+          throw new ProviderError(
+            "empty_response",
+            "模型没有生成可显示的答案，请重新提问。",
+            502,
+          );
+        }
+        if (finalText.length > MAX_OUTPUT_CHARACTERS) {
+          return `${finalText.slice(0, MAX_OUTPUT_CHARACTERS).trimEnd()}\n\n（回答过长，已截断）`;
+        }
+        const sanitized = sanitizeModelText(finalText);
+        if (!sanitized) {
+          throw new ProviderError(
+            "empty_response",
+            "模型没有生成可显示的答案，请重新提问。",
+            502,
+          );
+        }
+        return sanitized;
       }
 
       let body: ChatCompletionResponse;

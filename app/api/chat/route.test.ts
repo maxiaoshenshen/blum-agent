@@ -47,7 +47,7 @@ describe("POST /api/chat", () => {
 
     expect(response.status).toBe(200);
     expect(body.mode).toBe("demo");
-    expect(body.sources[0].id).toBe("motion-technologies");
+    expect(body.sources[0].id).toBe("aventos-hf");
   });
 
   it("rejects malformed JSON without leaking implementation details", async () => {

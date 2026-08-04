@@ -4,6 +4,7 @@ export {
   BriefcaseBusiness,
   CheckCircle2,
   ChevronRight,
+  CircleHelp,
   CircleUserRound,
   DraftingCompass,
   Factory,

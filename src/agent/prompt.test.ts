@@ -7,7 +7,7 @@ describe("Blum Agent system prompt", () => {
   it("forbids common plausible inferences that are absent from official summaries", () => {
     const prompt = buildSystemPrompt({
       role: getRole("consumer"),
-      matches: retrieveKnowledge("BLUMOTION 是什么？"),
+      matches: retrieveKnowledge("blumotion 是什么？"),
       risk: "standard",
     });
 

@@ -67,6 +67,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   return (
     <html lang="zh-CN">
       <body className={`${notoSans.variable} ${plexMono.variable}`}>

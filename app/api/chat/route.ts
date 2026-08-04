@@ -4,12 +4,20 @@ import {
 } from "@/src/agent/chat";
 import { ProviderError } from "@/src/agent/provider";
 import { parseChatRequest, ValidationError } from "@/src/agent/schema";
+import { FixedWindowRateLimiter } from "@/src/security/rate-limit";
 
 const MAX_REQUEST_BYTES = 7_500_000;
 const API_RESPONSE_HEADERS = {
   "Cache-Control": "no-store, max-age=0",
   "X-Content-Type-Options": "nosniff",
 } as const;
+
+// 全局限流器实例：30次请求/分钟，按IP追踪
+const globalRateLimiter = new FixedWindowRateLimiter({
+  limit: 30,
+  windowMs: 60_000,
+  maxEntries: 10_000,
+});
 
 class BodyReadError extends Error {
   readonly code: string;
@@ -89,6 +97,35 @@ async function readJsonBody(request: Request): Promise<unknown> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  // 从请求头获取真实IP（支持 CloudFlare 等代理）
+  const clientIp =
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+
+  // 限流检查
+  const decision = globalRateLimiter.attempt(clientIp);
+  if (!decision.allowed) {
+    return Response.json(
+      {
+        error: {
+          code: "rate_limited",
+          message: "请求过于频繁，请稍后重试。",
+        },
+      },
+      {
+        status: 429,
+        headers: {
+          ...API_RESPONSE_HEADERS,
+          "Retry-After": String(decision.retryAfterSeconds),
+          "X-RateLimit-Limit": "30",
+          "X-RateLimit-Remaining": "0",
+          "X-RateLimit-Reset": String(decision.retryAfterSeconds),
+        },
+      },
+    );
+  }
+
   let body: unknown;
   try {
     body = await readJsonBody(request);

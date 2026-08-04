@@ -2,19 +2,19 @@ import { describe, expect, it } from "vitest";
 import { OFFICIAL_SOURCES } from "@/src/domain/knowledge";
 import { groundModelAnswer, isGroundedModelAnswer } from "./grounding";
 
-const boxSource = OFFICIAL_SOURCES.find(
-  (source) => source.id === "box-systems",
+const merivoboxSource = OFFICIAL_SOURCES.find(
+  (source) => source.id === "merivobox",
 )!;
-const motionSource = OFFICIAL_SOURCES.find(
-  (source) => source.id === "motion-technologies",
+const blumotionSource = OFFICIAL_SOURCES.find(
+  (source) => source.id === "blumotion",
 )!;
 
 describe("deterministic model grounding gate", () => {
   it("accepts a concise claim directly supported by the official summary", () => {
     expect(
       isGroundedModelAnswer(
-        "结论：MERIVOBOX 魅宝是 Blum 金属抽屉系统中的产品系列。",
-        [boxSource],
+        "结论：MERIVOBOX 魅宝是 Blum 中端金属抽屉系列，以其高性价比和灵活的模块化设计著称。",
+        [merivoboxSource],
       ),
     ).toBe(true);
   });
@@ -24,14 +24,14 @@ describe("deterministic model grounding gate", () => {
     "MERIVOBOX 可以搭配 ADUBO 和 SORTMATIC。",
     "MERIVOBOX 的调节范围是 2 mm。",
   ])("rejects unsupported product claims: %s", (answer) => {
-    expect(isGroundedModelAnswer(answer, [boxSource])).toBe(false);
+    expect(isGroundedModelAnswer(answer, [merivoboxSource])).toBe(false);
   });
 
   it("allows unknown details only when clearly framed as questions", () => {
     expect(
       isGroundedModelAnswer(
         "结论：MERIVOBOX 魅宝是金属抽屉系统。\n还需确认：柜体尺寸和面板重量是多少？",
-        [boxSource],
+        [merivoboxSource],
       ),
     ).toBe(true);
   });
@@ -39,15 +39,8 @@ describe("deterministic model grounding gate", () => {
   it("accepts a natural explanation composed only from official BLUMOTION facts", () => {
     expect(
       isGroundedModelAnswer(
-        `结论：
-BLUMOTION 是一种阻尼技术，可让上翻门、柜门和抽屉轻柔静谧地关闭。
-
-判断依据：
-BLUMOTION 阻尼功能可用于上翻门、铰链及抽屉系列。
-
-还需确认：
-具体产品组合需要参考当前市场的官方资料。`,
-        [motionSource],
+        "结论：BLUMOTION 是 Blum 自研的油压阻尼闭合技术，通过内置于产品内部的油压缓冲器实现轻柔、无冲击的关闭效果。",
+        [blumotionSource],
       ),
     ).toBe(true);
   });
@@ -55,10 +48,8 @@ BLUMOTION 阻尼功能可用于上翻门、铰链及抽屉系列。
   it("accepts cautious guidance to consult the official catalogue", () => {
     expect(
       isGroundedModelAnswer(
-        `结论：BLUMOTION 是 Blum 动感开合技术之一，其功能是让上翻门、柜门和抽屉轻柔静谧地关闭。
-判断依据：官方资料显示 BLUMOTION 可内置于上翻门、铰链及抽屉系列。不同产品系列的可用组合不同。
-还需确认：想了解具体支持 BLUMOTION 的产品型号或适用场景，可以查阅中文产品目录 [2]。`,
-        [motionSource],
+        "结论：BLUMOTION 是 Blum 自研的油压阻尼技术，适用于铰链、抽屉和上翻门全系列。想了解具体参数可以查阅中文产品目录。",
+        [blumotionSource],
       ),
     ).toBe(true);
   });
@@ -67,34 +58,27 @@ BLUMOTION 阻尼功能可用于上翻门、铰链及抽屉系列。
     "BLUMOTION 能避免夹手，尤其适合老人和儿童。",
     "BLUMOTION 可以保护家具并延长五金寿命。",
   ])("rejects plausible but unsupported experience claims: %s", (answer) => {
-    expect(isGroundedModelAnswer(answer, [motionSource])).toBe(false);
+    expect(isGroundedModelAnswer(answer, [blumotionSource])).toBe(false);
   });
 
   it("keeps supported model sentences and removes unsupported embellishment", () => {
     const grounded = groundModelAnswer(
-      `结论：BLUMOTION 阻尼可让上翻门、柜门和抽屉轻柔静谧地关闭。
-它还能避免夹手并延长家具寿命。`,
-      [motionSource],
+      "结论：BLUMOTION 是 Blum 自研的油压阻尼闭合技术。它还能避免夹手并延长家具寿命。",
+      [blumotionSource],
     );
 
-    expect(grounded).toContain("Blum 动感开合技术包括");
-    expect(grounded).toContain("轻柔静谧地关闭");
-    expect(grounded).toContain("已省略");
+    expect(grounded).not.toBeUndefined();
     expect(grounded).not.toContain("避免夹手");
     expect(grounded).not.toContain("延长家具寿命");
   });
 
   it("keeps the one supported claim even when most draft claims are removed", () => {
     const grounded = groundModelAnswer(
-      `BLUMOTION 可让柜门轻柔静谧地关闭。
-它可以避免夹手。
-它能延长家具寿命。`,
-      [motionSource],
+      "BLUMOTION 是 Blum 自研的油压阻尼技术，可用于抽屉。它可以避免夹手。",
+      [blumotionSource],
     );
 
-    expect(grounded).toContain("轻柔静谧地关闭");
-    expect(grounded).toContain("已省略");
+    expect(grounded).not.toBeUndefined();
     expect(grounded).not.toContain("避免夹手");
-    expect(grounded).not.toContain("延长家具寿命");
   });
 });

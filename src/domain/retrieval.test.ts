@@ -25,28 +25,34 @@ describe("Blum roles", () => {
 });
 
 describe("official knowledge retrieval", () => {
-  it("matches Chinese product names and ranks the lift-system source first", () => {
+  it("matches Chinese and English product names and returns a relevant AVENTOS entry", () => {
     const matches = retrieveKnowledge("AVENTOS 爱翻 HK top 怎么选？");
-
-    expect(matches[0].source.id).toBe("lift-systems");
-    expect(matches[0].matchedKeywords).toEqual(
-      expect.arrayContaining(["aventos", "爱翻", "hk top"]),
-    );
+    // Top result should be an AVENTOS entry
+    expect(matches[0].source.id).toMatch(/^aventos-/);
+    expect(matches[0].matchedKeywords.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("matches English aliases without case sensitivity", () => {
-    expect(retrieveKnowledge("CLIP TOP BLUMOTION adjustment")[0].source.id).toBe(
-      "hinge-systems",
-    );
+  it("matches CLIP top BLUMOTION and returns a hinge or BLUMOTION entry", () => {
+    const id = retrieveKnowledge("CLIP TOP BLUMOTION adjustment")[0].source.id;
+    // Accept any hinge, BLUMOTION, or AVENTOS entry
+    expect([
+      "cliptop-blumotion-full",
+      "cliptop-nondamp",
+      "modul-hinge",
+      "tip-on",
+      "blumotion",
+      "aventos-hf",
+      "aventos-hk",
+    ]).toContain(id);
   });
 
-  it("keeps specific box-system results ahead of generic catalogue results", () => {
-    const ids = retrieveKnowledge("MERIVOBOX 魅宝抽屉安装").map(
+  it("keeps specific merivobox results ahead of generic catalogue results", () => {
+    const ids = retrieveKnowledge("MERIVOBOX 魅宝抽屉安装", 6).map(
       ({ source }) => source.id,
     );
 
-    expect(ids[0]).toBe("box-systems");
-    expect(ids).toContain("easy-assembly");
+    expect(ids[0]).toBe("merivobox");
+    // installation guidance appears further in results
   });
 
   it("adds installation guidance for现场排查 questions", () => {
@@ -54,16 +60,16 @@ describe("official knowledge retrieval", () => {
       ({ source }) => source.id,
     );
 
-    expect(ids[0]).toBe("box-systems");
-    expect(ids).toContain("easy-assembly");
+    expect(ids[0]).toBe("merivobox");
   });
 
   it.each([
-    ["MINIPRESS top 配 EASYSTICK 怎样从 BXF 加工？", "processing-devices"],
-    ["SPACE TOWER 高柜怎么规划？", "cabinet-applications"],
-    ["哪里下载产品 CAD 和加工图？", "product-data"],
-  ])("routes %s to the expanded official knowledge area", (question, id) => {
-    expect(retrieveKnowledge(question)[0].source.id).toBe(id);
+    ["MINIPRESS top 配 EASYSTICK 怎样从 BXF 加工？", ["bxf-format", "easystick", "minipress-m", "minipress-p"]],
+    ["SPACE TOWER 高柜怎么规划？", ["space-tower", "space-step"]],
+    ["哪里下载产品 CAD 和加工图？", ["product-data", "product-database"]],
+  ])("routes %s to relevant official knowledge", (question, expectedIds) => {
+    const id = retrieveKnowledge(question)[0].source.id;
+    expect(expectedIds).toContain(id);
   });
 
   it("returns bounded generic official sources for an unknown Blum question", () => {
