@@ -78,10 +78,10 @@ describe("grounded prompt", () => {
     expect(prompt).toContain("还需确认");
     expect(prompt).toContain("数值、尺寸、公差、调节范围或产品编号");
     expect(prompt).toContain("一律不得输出");
-    expect(prompt).toContain("不得声称“最常见”");
+    expect(prompt).toContain("不得声称最常见");
     expect(prompt).toContain("不得假设某个零件存在");
     expect(prompt).toContain("不要使用 Markdown 表格");
-    expect(prompt).toContain("禁止基于“一般流程”");
+    expect(prompt).toContain("禁止基于一般流程");
     expect(prompt).toContain("摘要未覆盖");
   });
 
