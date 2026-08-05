@@ -20,3 +20,9 @@ output/playwright/
 .dev.vars
 *.log
 .DS_Store
+
+# Next.js build artifacts
+.next/
+.next.bak/
+out/
+
