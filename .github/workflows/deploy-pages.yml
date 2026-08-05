@@ -38,20 +38,35 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Debug build output structure
+        run: |
+          echo "=== Checking key files ==="
+          if [ -f "out/server/app/index.html" ]; then echo "FOUND: out/server/app/index.html"; else echo "MISSING: out/server/app/index.html"; fi
+          if [ -f "out/index.html" ]; then echo "FOUND: out/index.html"; else echo "MISSING: out/index.html"; fi
+          if [ -d "out/server" ]; then echo "FOUND: out/server/"; else echo "MISSING: out/server/"; fi
+          if [ -d "out/build" ]; then echo "FOUND: out/build/"; else echo "MISSING: out/build/"; fi
+          echo "=== Files in out/ ==="
+          find out -type f 2>/dev/null | head -20 || echo "out/ not found or empty"
+
       - name: Fix static export directory structure
         run: |
-          # vinext outputs to out/server/app/ and out/_next/static/
-          mkdir -p out/_next/static
-          # Copy static assets to correct locations
-          if [ -d "out/static/chunks" ]; then
-            mkdir -p out/_next/static/chunks
-            cp -r out/static/chunks/* out/_next/static/chunks/ 2>/dev/null || true
+          echo "Step 1: Ensure out directory exists"
+          mkdir -p out
+          echo "Step 2: Copy HTML files"
+          if [ -f "out/server/app/index.html" ]; then
+            echo "Using vinext prerendered HTML"
+            cp out/server/app/index.html out/index.html
+            cp out/server/app/_not-found.html out/_not-found.html 2>/dev/null || true
+            cp out/server/app/_global-error.html out/_global-error.html 2>/dev/null || true
+          else
+            if [ -f "out/index.html" ]; then
+              echo "index.html already at root"
+            else
+              echo "Creating minimal index.html"
+              printf '%s\n' '<!DOCTYPE html>' '<html lang="zh-CN">' '<head>' '<meta charset="utf-8"/>' '<meta name="viewport" content="width=device-width, initial-scale=1"/>' '<title>Blum Agent</title>' '</head>' '<body>' '<div id="root"></div>' '</body>' '</html>' > out/index.html
+            fi
           fi
-          if [ -d "out/static/media" ]; then
-            mkdir -p out/_next/static/media
-            cp -r out/static/media/* out/_next/static/media/ 2>/dev/null || true
-          fi
-          # Copy static files from dist/client
+          echo "Step 3: Copy static assets from dist/client"
           cp dist/client/favicon.svg out/ 2>/dev/null || true
           cp dist/client/og.png out/ 2>/dev/null || true
           cp dist/client/manifest.json out/ 2>/dev/null || true
@@ -59,16 +74,15 @@ jobs:
           cp dist/client/sitemap.xml out/ 2>/dev/null || true
           cp dist/client/_headers out/ 2>/dev/null || true
           cp dist/client/sw.js out/ 2>/dev/null || true
-          # Move HTML to root
-          cp out/server/app/index.html out/index.html 2>/dev/null || true
-          cp out/server/app/_not-found.html out/_not-found.html 2>/dev/null || true
-          cp out/server/app/_global-error.html out/_global-error.html 2>/dev/null || true
-          # Clean up non-static files
-          rm -rf out/cache out/diagnostics out/trace out/trace-build out/turbopack out/types 2>/dev/null || true
-          rm -f out/BUILD_ID out/*.json out/*.js out/package.json out/required-server-files.js out/required-server-files.json 2>/dev/null || true
-          # Show final structure
-          echo "=== out/ structure ==="
-          ls -la out/ 2>/dev/null || echo "out/ not found"
+          echo "Step 4: Setup _next/static directory structure"
+          mkdir -p out/_next/static/chunks out/_next/static/media
+          if [ -d "out/static/chunks" ]; then cp -r out/static/chunks/* out/_next/static/chunks/ 2>/dev/null || true; fi
+          if [ -d "out/static/media" ]; then cp -r out/static/media/* out/_next/static/media/ 2>/dev/null || true; fi
+          if [ -d "out/build" ]; then cp -r out/build out/_next/static/ 2>/dev/null || true; fi
+          if [ -d "out/server" ]; then cp -r out/server out/_next/static/ 2>/dev/null || true; fi
+          echo "Step 5: Final verification"
+          if [ -f "out/index.html" ]; then echo "OK: index.html present"; else echo "FAIL: index.html MISSING"; fi
+          echo "Total files: $(find out -type f 2>/dev/null | wc -l)"
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
