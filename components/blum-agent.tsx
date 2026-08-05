@@ -1302,7 +1302,16 @@ export function BlumAgent() {
                             ? `${message.content.slice(0, 500)}…`
                             : message.content}
                           {isStreamingRef.current && message.id === streamingMessageIdRef.current ? (
+                            message.content.length < 30 ? (
+                              <span className="answer-skeleton-lines" aria-label="正在生成答案…" role="status">
+                                <span className="skeleton-line medium" />
+                                <span className="skeleton-line short" />
+                                <span className="skeleton-line full" />
+                                <span className="skeleton-line medium" />
+                              </span>
+                            ) : (
                             <span className="streaming-cursor" aria-hidden="true">_</span>
+                            )
                           ) : null}
                         </p>
                       </div>
@@ -1388,6 +1397,20 @@ export function BlumAgent() {
                           </div>
                         );
                       })() : null}
+                      {isStreamingRef.current && message.id === streamingMessageIdRef.current && !message.sources?.length ? (
+                        <div className="sources-skeleton" aria-label="正在加载来源…" role="status">
+                          <div className="sources-skeleton-label">来源</div>
+                          <div className="sources-skeleton-items">
+                            {[0, 1].map((i) => (
+                              <div key={i} className="sources-skeleton-card">
+                                <div className="sources-skeleton-line short" />
+                                <div className="sources-skeleton-line medium" />
+                                <div className="sources-skeleton-line full" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       {message.sources?.length ? (
                         <div className="source-section">
                           <h2>{copy.sources}</h2>
@@ -1436,13 +1459,32 @@ export function BlumAgent() {
                 {isLoading ? (
                   <div aria-live="polite" className="thinking" role="status">
                     <LoaderCircle aria-hidden="true" size={17} />
-                    <span className="thinking-text">
-                      {connectionState === "reconnecting"
-                        ? `${copy.reconnecting}...`
-                        : copy[requestStage]}
-                    </span>
-                    {hasLongWait ? <small className="thinking-estimate">预计还需片刻，正在继续处理。</small> : null}
-                    <span className="thinking-dots" aria-hidden="true" />
+                    <div className="thinking-steps" style={{ marginLeft: 4 }}>
+                      {(["retrieving", "analyzing", "composing"] as const).map((stage, idx) => {
+                        const stageOrder = (["retrieving", "analyzing", "composing"] as const).indexOf(requestStage);
+                        const isDone = idx < stageOrder;
+                        const isActive = idx === stageOrder;
+                        const stageLabels = {
+                          retrieving: locale === "en" ? "检索" : "检索",
+                          analyzing: locale === "en" ? "分析" : "分析",
+                          composing: locale === "en" ? "生成" : "生成",
+                        } as const;
+                        return (
+                          <span key={stage} className="thinking-step">
+                            <span
+                              className={`thinking-step-dot${isDone ? " done" : isActive ? " active" : ""}`}
+                            />
+                            <span style={{ fontSize: 10, color: isActive ? "var(--ink)" : "var(--muted)" }}>
+                              {stageLabels[stage]}
+                            </span>
+                            {idx < 2 ? (
+                              <ChevronRight aria-hidden="true" size={10} style={{ color: "var(--line-strong)" }} />
+                            ) : null}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {hasLongWait ? <small className="thinking-estimate" style={{ marginLeft: 8 }}>预计还需片刻…</small> : null}
                   </div>
                 ) : null}
               </div>

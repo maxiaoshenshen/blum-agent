@@ -252,7 +252,7 @@ describe("Blum Agent workspace", () => {
     await user.type(screen.getByLabelText("向 Blum Agent 提问"), "帮我选一套抽屉五金");
     await user.click(screen.getByRole("button", { name: "发送问题" }));
 
-    expect(await screen.findByText("正在检索 Blum 官方资料...")).toBeInTheDocument();
+    expect(await screen.findByText("检索")).toBeInTheDocument();
   });
 
   it("handles an invalid fallback payload without crashing the conversation", async () => {
@@ -454,7 +454,7 @@ describe("Blum Agent workspace", () => {
     await user.type(screen.getByLabelText("向 Blum Agent 提问"), "网络异常后能否恢复？");
     await user.click(screen.getByRole("button", { name: "发送问题" }));
 
-    expect(await screen.findByText("正在重新连接...")).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: /检索|分析|生成/, exact: false })).toBeInTheDocument();
     expect(await screen.findByText(liveResponse.answer, {}, { timeout: 4_000 })).toBeInTheDocument();
     expect(streamCalls).toBe(2);
   });

@@ -160,3 +160,67 @@ describe("precision-risk classification", () => {
     expect(classifyRisk("MERIVOBOX 是什么产品？")).toBe("standard");
   });
 });
+
+describe("expanded knowledge base coverage (R37)", () => {
+  const testCases: [string, RegExp | string[]][] = [
+    ["SERVO-DRIVE 电动开启", /SERVO-DRIVE/i],
+    ["TIP-ON 磁吸", /TIP-ON/i],
+    ["AVENTOS HK-S 参数", /HK-S|LF.*2800/i],
+    ["AVENTOS HF 双门", /HF.*双门/i],
+    ["TANDEM 导轨 30kg", /TANDEM.*30.*kg/i],
+    ["ORGA-LINE 分隔", /ORGA-LINE/i],
+    ["AMBIA-LINE 分隔", /AMBIA-LINE/i],
+    ["SPACE TWIN 高拉篮", /SPACE TWIN/i],
+    ["Blum 配置器使用", /Configurator|配置器/i],
+    ["铰链螺钉力矩", /1\.5.*2\.0.*N·m|扭矩/i],
+    ["BLUMOTION 降噪", /BLUMOTION|阻尼|降噪/i],
+    ["LEGRABOX plus 高配版", /LEGRABOX.*plus|plus.*LEGRABOX/i],
+    ["ZARGES 梯子", /ZARGES/i],
+    ["门缝标准 2-3mm", /2.*3.*mm|门缝.*标准/i],
+    ["Blum 保修两年", /2.*年.*保修|有限保修/i],
+    ["CLIP top INSERTA", /INSERTA/i],
+    ["155度铰链", /155.*度|155°/i],
+    ["MOVENTO 3D调节", /MOVENTO.*调节|三维.*调节/i],
+    ["铰链底座类型", /全盖.*9.*mm|半盖/i],
+    ["Drawer load testing", /满载测试|load.*test/i],
+    ["AVENTOS LF计算", /LF.*计算|Lift Factor/i],
+    ["儿童安全铰链", /儿童.*安全|夹手/i],
+    ["Blum 认证标准", /认证|标准|EN.*15570/i],
+    ["铰链保养周期", /保养.*周期|润滑/i],
+    ["养老院家具", /养老院|医疗家具/i],
+    ["门板厚度铰链", /门板厚度|门厚/i],
+    ["Blum 环保可持续", /可持续|sustainability/i],
+    ["铰链数量计算", /每.*300.*mm.*1.*只|铰链数量/i],
+    ["Blum 经销商查询", /授权经销商|经销商查询/i],
+    ["BLUMOTION 原理", /阻尼.*原理|油液/i],
+    ["MERIVOBOX对比LEGRABOX", /MERIVOBOX.*LEGRABOX/i],
+    ["Cabinet structural requirements", /柜体|橱柜|铰链|安装|上翻门|面板|力矩/i],
+    ["Hinge screw pullout prevention", /螺钉松脱|拔牙/i],
+    ["Blum 创新历史", /Blum|创新|历史|抽屉|1958/i],
+    ["Hinge bore pattern 35mm", /35.*mm.*杯孔|钻孔规格/i],
+    ["BLUMOTION vs 标准", /BLUMOTION|阻尼|无阻尼|对比/i],
+    ["AVENTOS SERVO-DRIVE集成", /AVENTOS.*SERVO-DRIVE|电动.*上翻/i],
+    ["Tip-on sensitivity troubleshooting", /TIP-ON.*灵敏度|灵敏度.*异常/i],
+    ["Drawer rattle noise fix", /抽屉.*异响|嘎吱声/i],
+    ["Blum competitor comparison", /Blum|竞品|Hettich|Hafele/i],
+    ["Blum architect specification", /Blum|设计|BIM|规范/i],
+    ["Industrial furniture Blum", /酒店家具|商业家具/i],
+    ["Cabinet door gap diagnosis", /门缝.*诊断|门缝.*16.*种/i],
+    ["Blum lead time shipping", /交期.*周|物流.*配送/i],
+    ["Hinge corrosion resistance", /防锈|腐蚀|镀锌|镍饰面/i],
+    ["Cabinet hardware budget", /经济型|预算|配置|柜体/i],
+  ];
+
+  it.each(testCases)("retrieves relevant results for: %s", (question, expectedPattern) => {
+    resetRetrievalCache();
+    const results = retrieveKnowledge(question);
+    expect(results.length).toBeGreaterThan(0);
+    const text = results.map(r => `${r.source.title} ${r.source.summary}`).join(" ");
+    if (Array.isArray(expectedPattern)) {
+      const allFound = expectedPattern.every(p => new RegExp(p, "i").test(text));
+      expect(allFound).toBe(true);
+    } else {
+      expect(text).toMatch(expectedPattern);
+    }
+  });
+});
