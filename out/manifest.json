@@ -1,0 +1,21 @@
+{
+  "name": "Blum Agent | 百隆五金智能助手",
+  "short_name": "Blum助手",
+  "description": "面向设计师、销售、安装工、生产、采购和消费者的百隆五金专业助手，提供官方资料优先、风险分级的产品与应用建议。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f6ef",
+  "theme_color": "#ef561f",
+  "orientation": "portrait-primary",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "lang": "zh-CN",
+  "scope": "/"
+}
