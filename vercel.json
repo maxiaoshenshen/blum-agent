@@ -1,0 +1,15 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "regions": ["hkg1"],
+  "env": {
+    "PROVIDER_BASE_URL": "@provider-base-url",
+    "PROVIDER_API_KEY": "@provider-api-key",
+    "PROVIDER_MODEL": "@provider-model"
+  },
+  "secretEnv": [
+    "PROVIDER_API_KEY"
+  ]
+}
