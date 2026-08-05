@@ -37,8 +37,8 @@ jobs:
 
       - name: Build
         env:
-          NEXT_PUBLIC_BASE_PATH: ""
-          NEXT_PUBLIC_SITE_URL: ${{ steps.deployment.outputs.page_url }}
+          NEXT_PUBLIC_BASE_PATH: /blum-agent
+          NEXT_PUBLIC_SITE_URL: https://maxiaoshenshen.github.io
           NEXT_PUBLIC_API_BASE_URL: https://rsxermu666.cn
           NEXT_PUBLIC_API_KEY: ${{ secrets.BLUM_API_KEY }}
           NEXT_PUBLIC_API_MODEL: claude-opus-5
