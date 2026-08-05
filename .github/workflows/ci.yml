@@ -7,13 +7,21 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
+    permissions:
+      contents: read
+      statuses: write
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
@@ -24,8 +32,32 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Unit tests
+      - name: Run unit tests
         run: npm run test:unit -- --run
 
       - name: Build
         run: npm run build
+
+      - name: Upload build artifact
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact-${{ github.run_id }}
+          path: |
+            .next/
+            .openai/
+            package.json
+            package-lock.json
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Commit status notification
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "✅ CI passed for commit ${{ github.sha }}"
+          echo "📦 GitHub Actions CI completed successfully"
+          echo "🔔 Sites monitor agent will automatically deploy to Sites"
+
+  # Deployment is handled by the Codex Sites Monitor agent (scripts/sites-monitor/)
+  # The agent watches this GitHub repo and deploys to Sites automatically on main pushes.
+  # See: scripts/sites-monitor/README.md for setup instructions.
