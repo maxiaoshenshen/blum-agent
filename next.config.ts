@@ -33,10 +33,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  typescript: { ignoreBuildErrors: true },
   output: 'export',
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? '',
-  trailingSlash: true,
   async headers() {
     return [
       {
