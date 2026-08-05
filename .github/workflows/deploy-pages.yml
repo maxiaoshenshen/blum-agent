@@ -38,6 +38,38 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Fix static export directory structure
+        run: |
+          # vinext outputs to out/server/app/ and out/_next/static/
+          mkdir -p out/_next/static
+          # Copy static assets to correct locations
+          if [ -d "out/static/chunks" ]; then
+            mkdir -p out/_next/static/chunks
+            cp -r out/static/chunks/* out/_next/static/chunks/ 2>/dev/null || true
+          fi
+          if [ -d "out/static/media" ]; then
+            mkdir -p out/_next/static/media
+            cp -r out/static/media/* out/_next/static/media/ 2>/dev/null || true
+          fi
+          # Copy static files from dist/client
+          cp dist/client/favicon.svg out/ 2>/dev/null || true
+          cp dist/client/og.png out/ 2>/dev/null || true
+          cp dist/client/manifest.json out/ 2>/dev/null || true
+          cp dist/client/robots.txt out/ 2>/dev/null || true
+          cp dist/client/sitemap.xml out/ 2>/dev/null || true
+          cp dist/client/_headers out/ 2>/dev/null || true
+          cp dist/client/sw.js out/ 2>/dev/null || true
+          # Move HTML to root
+          cp out/server/app/index.html out/index.html 2>/dev/null || true
+          cp out/server/app/_not-found.html out/_not-found.html 2>/dev/null || true
+          cp out/server/app/_global-error.html out/_global-error.html 2>/dev/null || true
+          # Clean up non-static files
+          rm -rf out/cache out/diagnostics out/trace out/trace-build out/turbopack out/types 2>/dev/null || true
+          rm -f out/BUILD_ID out/*.json out/*.js out/package.json out/required-server-files.js out/required-server-files.json 2>/dev/null || true
+          # Show final structure
+          echo "=== out/ structure ==="
+          ls -la out/ 2>/dev/null || echo "out/ not found"
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
