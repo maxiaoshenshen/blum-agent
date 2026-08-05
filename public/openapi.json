@@ -1,0 +1,201 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Blum Agent API",
+    "description": "百隆五金智能助手 API - 支持流式和非流式对话接口",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Blum Agent Support"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://blum-agent-cn.maxiaoshen.chatgpt.site",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/api/chat": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "发送对话请求（非流式）",
+        "description": "发送用户消息，返回完整的 AI 助手回复。适合需要一次性获取完整回复的场景。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["role", "messages"],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": ["designer", "sales", "installer", "production", "procurement", "consumer"],
+                    "description": "用户角色，决定回答的风格和侧重点"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "description": "对话历史，含用户问题和之前的助手回复",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": { "type": "string", "enum": ["user", "assistant"] },
+                        "content": { "type": "string" }
+                      }
+                    }
+                  },
+                  "image": {
+                    "type": "string",
+                    "description": "可选，base64 编码的图片（data:image/jpeg;base64,...）"
+                  }
+                }
+              },
+              "example": {
+                "role": "designer",
+                "messages": [
+                  { "role": "user", "content": "AVENTOS HF 的力矩怎么计算？" }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功返回",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "answer": { "type": "string", "description": "AI 助手回复" },
+                    "confidence": {
+                      "type": "string",
+                      "enum": ["verified", "guided", "needs-review"],
+                      "description": "答案置信度"
+                    },
+                    "sources": {
+                      "type": "array",
+                      "description": "引用的官方资料",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "title": { "type": "string" },
+                          "summary": { "type": "string" },
+                          "url": { "type": "string" }
+                        }
+                      }
+                    },
+                    "followUps": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "建议的追问话题"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["live", "fallback"],
+                      "description": "live=实时生成, fallback=官方资料降级响应"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "请求参数错误" },
+          "429": { "description": "请求过于频繁，请稍后重试" },
+          "500": { "description": "服务器内部错误" },
+          "503": { "description": "服务暂时不可用" }
+        }
+      }
+    },
+    "/api/chat/stream": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "流式对话请求（推荐）",
+        "description": "使用 Server-Sent Events（SSE）流式返回 AI 回复，适合需要实时展示打字效果的场景。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChatRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SSE 流式响应",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "SSE 格式数据流"
+                },
+                "example": "data: {\"type\":\"sources\",\"sources\":[{\"id\":\"hinge-selection\",\"title\":\"铰链选型指南\",\"summary\":\"...\",\"url\":\"https://...\"}]}\n\ndata: {\"type\":\"text\",\"text\":\"AVENTOS HF 的力矩...\"}\n\ndata: {\"type\":\"done\",\"answer\":\"...\",\"confidence\":\"verified\",\"followUps\":[\"...\"]}"
+              }
+            }
+          },
+          "400": { "description": "请求参数错误" },
+          "429": { "description": "请求过于频繁" },
+          "503": { "description": "服务暂时不可用" }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "健康检查",
+        "description": "返回服务健康状态和版本信息",
+        "responses": {
+          "200": {
+            "description": "服务正常",
+            "content": {
+              "application/json": {
+                "example": { "status": "healthy", "version": "0.1.0", "timestamp": "2026-08-05T00:00:00.000Z" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback": {
+      "post": {
+        "tags": ["Feedback"],
+        "summary": "提交反馈",
+        "description": "对 AI 回答提交满意/不满意反馈",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["messageId", "rating"],
+                "properties": {
+                  "messageId": { "type": "string", "description": "消息 ID" },
+                  "rating": { "type": "string", "enum": ["thumbs_up", "thumbs_down"], "description": "评价" },
+                  "comment": { "type": "string", "description": "可选，补充说明" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "反馈已提交" },
+          "400": { "description": "参数错误" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatRequest": {
+        "type": "object",
+        "required": ["role", "messages"],
+        "properties": {
+          "role": { "type": "string", "enum": ["designer", "sales", "installer", "production", "procurement", "consumer"] },
+          "messages": { "type": "array", "items": { "type": "object", "properties": { "role": { "type": "string" }, "content": { "type": "string" } } } },
+          "image": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -76,6 +76,8 @@ describe("Blum Agent workspace", () => {
 
   it("traps focus in the help dialog and returns focus to its trigger", async () => {
     const user = userEvent.setup();
+    // Bypass onboarding by setting localStorage before render
+    localStorage.setItem("blum_has_visited", "true");
     render(<BlumAgent />);
     const trigger = screen.getByRole("button", { name: "打开使用帮助" });
 
@@ -454,8 +456,8 @@ describe("Blum Agent workspace", () => {
     await user.type(screen.getByLabelText("向 Blum Agent 提问"), "网络异常后能否恢复？");
     await user.click(screen.getByRole("button", { name: "发送问题" }));
 
-    expect(await screen.findByRole("status", { name: /检索|分析|生成/, exact: false })).toBeInTheDocument();
-    expect(await screen.findByText(liveResponse.answer, {}, { timeout: 4_000 })).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: /检索|分析|生成/ })).toBeInTheDocument();
+    expect(await screen.findByText(liveResponse.answer, { exact: false }, { timeout: 4_000 })).toBeInTheDocument();
     expect(streamCalls).toBe(2);
   });
 

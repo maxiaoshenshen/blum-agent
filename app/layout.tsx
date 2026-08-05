@@ -88,7 +88,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         >
           {children}
         </ErrorBoundary>
-      </body>
+              <script dangerouslySetInnerHTML={{ __html: `if ("serviceWorker" in navigator) { window.addEventListener("load", function() { navigator.serviceWorker.register("/sw.js").catch(function(err) { console.warn("SW registration failed:", err); }); }); }` }} />
+\n      </body>
     </html>
   );
 }

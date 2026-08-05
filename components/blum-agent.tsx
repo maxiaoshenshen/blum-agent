@@ -35,6 +35,7 @@ import {
   LoaderCircle,
   RefreshCcw,
   Send,
+  MoreHorizontal,
   ShoppingCart,
   Sparkles,
   Wrench,
@@ -395,7 +396,68 @@ function HelpOverlay({ onClose }: { onClose: () => void }) {
   );
 }
 
+
+function OnboardingModal({ onDismiss }: { onDismiss: () => void }) {
+  const [isClosing, setIsClosing] = useState(false);
+  const dismiss = () => {
+    setIsClosing(true);
+    window.setTimeout(onDismiss, 280);
+  };
+
+  return (
+    <div
+      aria-modal="true"
+      className={`onboarding-backdrop${isClosing ? " is-closing" : ""}`}
+      role="dialog"
+    >
+      <div className="onboarding-panel">
+        <div className="onboarding-hero">🤖</div>
+        <h2 className="onboarding-title">欢迎使用 Blum Agent！</h2>
+        <p className="onboarding-subtitle">
+          专为百隆五金相关人士设计的 AI 助手
+        </p>
+        <div className="onboarding-tips">
+          <div className="onboarding-tip-item">
+            <span className="onboarding-tip-icon">👤</span>
+            <span>选择角色（设计师 / 销售 / 安装 / 生产 / 采购 / 消费者）以获得更精准的回答</span>
+          </div>
+          <div className="onboarding-tip-item">
+            <span className="onboarding-tip-icon">📷</span>
+            <span>可以上传图片提问，例如铰链标签、钻孔图</span>
+          </div>
+          <div className="onboarding-tip-item">
+            <span className="onboarding-tip-icon">📋</span>
+            <span>可以随时导出对话记录</span>
+          </div>
+          <div className="onboarding-tip-item">
+            <span className="onboarding-tip-icon">⚠️</span>
+            <span>精确选型（型号 / 尺寸 / 承重）请以官方资料复核为准</span>
+          </div>
+        </div>
+        <div className="onboarding-actions">
+          <button
+            className="onboarding-btn-primary"
+            onClick={dismiss}
+            type="button"
+          >
+            开始使用
+          </button>
+          <button
+            className="onboarding-btn-secondary"
+            onClick={dismiss}
+            type="button"
+          >
+            跳过
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BlumAgent() {
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [exportMenuId, setExportMenuId] = useState<string | null>(null);
   const [roleId, setRoleId] = useState<RoleId>("consumer");
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -453,6 +515,10 @@ export function BlumAgent() {
   );
   const copy = getMessages(locale);
   const selectedRoleLabel = locale === "en" ? englishRoleLabels[selectedRole.id] : selectedRole.label;
+  const dismissOnboarding = useCallback(() => {
+    setShowOnboarding(false);
+    if (typeof window !== "undefined") localStorage.setItem("blum_has_visited", "true");
+  }, []);
 
   const announce = useCallback((message: string) => {
     setNotice(message);
@@ -501,6 +567,13 @@ export function BlumAgent() {
       setHasRestoredConversation(true);
     }, 0);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    // Show onboarding if user hasn't visited before
+    if (localStorage.getItem("blum_has_visited") !== "true") {
+      setShowOnboarding(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -613,6 +686,82 @@ export function BlumAgent() {
       minute: "2-digit",
       hour12: false,
     }).format(timestamp);
+  }
+
+  function handleExport(messageId: string, format: "text" | "markdown" | "json") {
+    const message = messages.find((m) => m.id === messageId);
+    if (!message) return;
+    const userMsg = messages[messages.indexOf(message) - 1];
+    const exportTime = new Date().toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" });
+    if (format === "text") {
+      const text = [
+        `Blum Agent | ${selectedRole.label}`,
+        `时间：${exportTime}`,
+        "",
+        `【用户】`,
+        userMsg?.content ?? "",
+        "",
+        `【Blum Agent】`,
+        message.content,
+        message.confidence ? `\n[置信度] ${confidenceLabels[message.confidence]}` : "",
+        "",
+        message.sources?.length
+          ? `【来源】\n${message.sources.map((s) => `• ${s.title}: ${s.url}`).join("\n")}`
+          : "",
+      ].filter(Boolean).join("\n");
+      void navigator.clipboard?.writeText(text).catch(() => {
+        const ta = document.createElement("textarea");
+        ta.value = text; ta.style.cssText = "position:fixed;opacity:0"; document.body.appendChild(ta);
+        ta.select(); document.execCommand("copy"); ta.remove();
+      });
+    } else if (format === "markdown") {
+      const md = [
+        `# Blum Agent 对话导出`,
+        ``,
+        `**角色**：${selectedRole.label}`,
+        `**时间**：${exportTime}`,
+        ``,
+        `## 用户`,
+        ``,
+        userMsg?.content ?? "",
+        ``,
+        `## Blum Agent`,
+        ``,
+        message.content,
+        message.confidence ? `\n> **置信度**：${confidenceLabels[message.confidence]}` : "",
+        ``,
+        message.sources?.length
+          ? `## 来源\n\n${message.sources.map((s) => `- [${s.title}](${s.url})`).join("\n")}`
+          : "",
+      ].filter(Boolean).join("\n");
+      void navigator.clipboard?.writeText(md).catch(() => {
+        const ta = document.createElement("textarea");
+        ta.value = md; ta.style.cssText = "position:fixed;opacity:0"; document.body.appendChild(ta);
+        ta.select(); document.execCommand("copy"); ta.remove();
+      });
+    } else {
+      const data = {
+        exportedAt: exportTime,
+        role: selectedRole.id,
+        roleLabel: selectedRole.label,
+        userMessage: userMsg?.content ?? "",
+        assistantMessage: message.content,
+        confidence: message.confidence ?? null,
+        sources: message.sources?.map((s) => ({ title: s.title, url: s.url, summary: s.summary })) ?? [],
+        followUps: message.followUps ?? [],
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `blum-agent-${messageId.slice(0, 8)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    setExportMenuId(null);
+    announce(locale === "en" ? "Exported" : "已导出");
   }
 
   async function copySourceLink(source: SourceReference) {
@@ -1008,6 +1157,42 @@ export function BlumAgent() {
   return (
     <main className={`agent-shell${isKeyboardOpen ? " keyboard-open" : ""}`} data-locale={locale} id="workspace">
       {showHelp && <HelpOverlay onClose={closeHelp} />}
+      {showOnboarding && <OnboardingModal onDismiss={dismissOnboarding} />}
+      {exportMenuId ? (
+        <div aria-label="Export menu backdrop" className="export-menu-backdrop" onClick={() => setExportMenuId(null)} role="presentation">
+          <div
+            aria-label="导出选项"
+            className="export-menu"
+            role="menu"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="export-menu-item"
+              onClick={() => handleExport(exportMenuId, "text")}
+              role="menuitem"
+              type="button"
+            >
+              📄 复制为纯文本
+            </button>
+            <button
+              className="export-menu-item"
+              onClick={() => handleExport(exportMenuId, "markdown")}
+              role="menuitem"
+              type="button"
+            >
+              📝 复制为 Markdown
+            </button>
+            <button
+              className="export-menu-item"
+              onClick={() => handleExport(exportMenuId, "json")}
+              role="menuitem"
+              type="button"
+            >
+              💾 下载 JSON
+            </button>
+          </div>
+        </div>
+      ) : null}
       <p aria-live="polite" className="sr-only" role="status">
         {notice || (copiedSourceId ? "资料链接已复制到剪贴板" : "")}
       </p>
@@ -1115,7 +1300,7 @@ export function BlumAgent() {
                   <button
                     aria-label={locale === "en" ? `Switch to ${englishRoleLabels[role.id]}` : `切换至${role.label}角色`}
                     aria-pressed={selected}
-                    className="role-button"
+                    className={`role-button${selected ? " is-selected" : ""}`}
                     key={role.id}
                     onClick={() => {
                       setRoleId(role.id);
@@ -1130,6 +1315,9 @@ export function BlumAgent() {
                       <small>{role.eyebrow}</small>
                     </span>
                     <ChevronRight aria-hidden="true" size={16} />
+                    <span className="role-tooltip" aria-hidden="true">
+                      {role.description}
+                    </span>
                   </button>
                 );
               })}

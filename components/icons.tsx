@@ -18,4 +18,5 @@ export {
   Sparkles,
   Wrench,
   X,
+  MoreHorizontal,
 } from "lucide-react";

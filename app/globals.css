@@ -2445,3 +2445,274 @@ button {
   gap: 5px;
 }
 
+
+/* ============================================================
+   R40: Onboarding Modal
+   ============================================================ */
+.onboarding-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 17, 23, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: onboarding-fadein 0.28s ease-out;
+}
+
+.onboarding-backdrop.is-closing {
+  animation: onboarding-fadeout 0.28s ease-in forwards;
+}
+
+@keyframes onboarding-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes onboarding-fadeout {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.onboarding-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 36px 32px 32px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  animation: onboarding-panel-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes onboarding-panel-in {
+  from { transform: scale(0.9) translateY(12px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.onboarding-hero {
+  font-size: 52px;
+  margin-bottom: 16px;
+  line-height: 1;
+}
+
+.onboarding-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 8px;
+  font-family: var(--font-plex-sans), sans-serif;
+}
+
+.onboarding-subtitle {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0 0 28px;
+}
+
+.onboarding-tips {
+  text-align: left;
+  margin-bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.onboarding-tip-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--ink-secondary);
+  line-height: 1.5;
+}
+
+.onboarding-tip-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  margin-top: 1px;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.onboarding-btn-primary {
+  background: var(--ink);
+  color: var(--surface);
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-plex-sans), sans-serif;
+  transition: background 0.15s, transform 0.1s;
+  width: 100%;
+}
+
+.onboarding-btn-primary:hover {
+  background: #2d3139;
+  transform: translateY(-1px);
+}
+
+.onboarding-btn-primary:active {
+  transform: translateY(0);
+}
+
+.onboarding-btn-secondary {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  padding: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--font-plex-sans), sans-serif;
+  transition: color 0.15s;
+}
+
+.onboarding-btn-secondary:hover {
+  color: var(--ink-secondary);
+}
+
+/* ============================================================
+   R40: Export menu
+   ============================================================ */
+.export-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: transparent;
+}
+
+.export-menu {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  min-width: 180px;
+}
+
+.export-menu-item {
+  display: block;
+  width: 100%;
+  padding: 12px 18px;
+  text-align: left;
+  font-size: 14px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-plex-sans), sans-serif;
+  transition: background 0.12s;
+}
+
+.export-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.export-menu-item:not(:last-child) {
+  border-bottom: 1px solid var(--line);
+}
+
+/* ============================================================
+   R40: Export message button in heading
+   ============================================================ */
+.export-msg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0;
+  margin-left: 8px;
+  vertical-align: middle;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.export-msg-btn:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.export-msg-btn[aria-expanded="true"] {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+
+/* ============================================================
+   R40: Role selector enhancement — tooltips + selected highlight
+   ============================================================ */
+.role-list {
+  position: relative;
+}
+
+.role-button {
+  position: relative;
+}
+
+.role-button .role-tooltip {
+  display: none;
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+  max-width: 220px;
+  white-space: normal;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  pointer-events: none;
+}
+
+.role-button .role-tooltip::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-right-color: var(--ink);
+}
+
+.role-button:hover .role-tooltip {
+  display: block;
+  animation: tooltip-in 0.15s ease-out;
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(-4px); }
+  to { opacity: 1; transform: translateY(-50%) translateX(0); }
+}
+
+/* R40: Selected role visual highlight */
+.role-button.is-selected {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.role-button.is-selected small {
+  color: var(--accent-secondary);
+}
+
