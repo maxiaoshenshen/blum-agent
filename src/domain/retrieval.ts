@@ -5,7 +5,7 @@
  * knowledge access. This allows the knowledge base to be loaded at runtime from
  * public/data/knowledge.json without requiring a rebuild.
  */
-import { getAllSources, getFallbackSources as getFallbackFromService } from "./knowledge-service";
+import { getAllSources, getFallbackSources as getFallbackFromService, getFallbackSources } from "./knowledge-service";
 import type { KnowledgeMatch, OfficialSource, RiskLevel } from "./types";
 
 const precisionPatterns = [
@@ -264,6 +264,9 @@ export function retrieveKnowledge(
   limit = 4,
   conversationHistory: readonly RetrievalHistoryMessage[] = [],
 ): KnowledgeMatch[] {
+  const dbg = globalThis as Record<string, unknown>;
+  dbg.__chat_test_retrieve = { question, limit };
+
   ensureIndexes();
   const normalizedQuestion = normalizeQuestion(question);
   const category = requestedCategory(normalizedQuestion);
@@ -405,3 +408,4 @@ export function resetBm25Index(): void {
   _avgDocLen = 0;
   _bm25Initialized = false;
 }
+export { getFallbackSources };

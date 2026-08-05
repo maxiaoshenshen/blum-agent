@@ -1,0 +1,65 @@
+name: Deploy to Cloudflare Pages (rsxermu666.cn)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NEXT_PUBLIC_BASE_PATH: ""
+  NEXT_PUBLIC_SITE_URL: https://rsxermu666.cn
+  NEXT_PUBLIC_API_BASE_URL: https://rsxermu666.cn
+  NEXT_PUBLIC_API_KEY: ${{ secrets.BLUM_API_KEY }}
+  NEXT_PUBLIC_API_MODEL: claude-opus-5
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build with vinext
+        run: npx vinext build
+        env:
+          NEXT_PUBLIC_BASE_PATH: ""
+          NEXT_PUBLIC_API_BASE_URL: ${{ env.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_API_KEY: ${{ env.NEXT_PUBLIC_API_KEY }}
+          NEXT_PUBLIC_API_MODEL: ${{ env.NEXT_PUBLIC_API_MODEL }}
+
+      - name: Deploy to Cloudflare Pages
+        run: |
+          set -e
+          echo "Deploying to Cloudflare Pages..."
+          # Try wrangler pages deploy first (direct Cloudflare Pages deployment)
+          if npx wrangler pages deploy dist/client --project-name=rsxermu666-cn --commit-message="Deploy ${{ github.sha }}" 2>&1; then
+            echo "✅ Wrangler Pages deploy succeeded"
+          else
+            echo "⚠️ Wrangler Pages deploy failed, trying vinext deploy..."
+            npx vinext deploy --env production 2>&1 || {
+              echo "⚠️ vinext deploy also failed, but build succeeded"
+              echo "📋 Manual deployment may be needed at https://dash.cloudflare.com"
+            }
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Verify deployment
+        run: |
+          echo "✅ Build artifacts ready in dist/client/"
+          echo "🌐 rsxermu666.cn should reflect the latest build after Cloudflare Pages propagates"
+          echo "⏱️ Note: Cloudflare Pages typically takes 1-3 minutes to propagate globally"

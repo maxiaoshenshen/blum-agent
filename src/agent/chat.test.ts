@@ -15,7 +15,9 @@ const hingeRequest: ParsedChatRequest = {
 
 describe("Blum chat orchestration", () => {
   it("returns a grounded live answer with official sources", async () => {
-    const requestCompletion = vi.fn(async () => "MERIVOBOX 是 Blum 金属抽屉系统 MERIVOBOX 系列。");
+    const requestCompletion = vi.fn(async () =>
+    "MERIVOBOX 魅宝是 Blum 中端金属抽屉系列，侧板厚度为 17mm，标准承重 30kg，采用 Z35E 导轨（内置 BLUMOTION 阻尼）。"
+);
 
     const response = await answerChat(merivoboxRequest, {
       providerConfig: {

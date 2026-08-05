@@ -12,6 +12,7 @@
  */
 
 import type { OfficialSource } from "./types";
+import { OFFICIAL_SOURCES as KNOWLEDGE_BASE } from "./knowledge";
 
 export interface KnowledgeSnapshot {
   version: string;
@@ -32,13 +33,33 @@ let _snapshot: KnowledgeSnapshot | null = null;
  */
 export async function preloadKnowledge(): Promise<void> {
   if (_snapshot) return;
-  _snapshot = await loadFromCacheOrNetwork();
+  // Set embedded fallback immediately so synchronous knowledge access works
+  // while the async network load completes in the background.
+  _snapshot = createEmbeddedSnapshot();
+  try {
+    const fresh = await loadFromCacheOrNetwork();
+    if (fresh && fresh.officialSources.length > _snapshot.officialSources.length) {
+      _snapshot = fresh;
+    }
+  } catch {
+    // Network load failed — embedded fallback is already in place.
+  }
 }
 
 /** Synchronous access — requires preloadKnowledge() to have been called first. */
 export function getKnowledge(): KnowledgeSnapshot {
   if (!_snapshot) {
-    _snapshot = loadFromLocalStorage() ?? createEmptySnapshot();
+    _snapshot = loadFromLocalStorage() ?? createEmbeddedSnapshot();
+  }
+  return _snapshot;
+}
+
+/** Synchronous access that always returns embedded knowledge when localStorage is empty.
+ *  Unlike getKnowledge(), this does NOT attempt async loadFromCacheOrNetwork().
+ *  Use this in test environments or any synchronous code path. */
+export function getKnowledgeSync(): KnowledgeSnapshot {
+  if (!_snapshot) {
+    _snapshot = loadFromLocalStorage() ?? createEmbeddedSnapshot();
   }
   return _snapshot;
 }
@@ -79,6 +100,21 @@ function createEmptySnapshot(): KnowledgeSnapshot {
   };
 }
 
+/** Build a full snapshot from the embedded KNOWLEDGE_BASE.
+ *  Used as fallback when localStorage is unavailable (e.g. Node.js test environment).
+ *  Selects the first 6 entries as the fallback set. */
+function createEmbeddedSnapshot(): KnowledgeSnapshot {
+  const embedded = KNOWLEDGE_BASE as unknown as readonly OfficialSource[];
+  const fallbackSourceIds = embedded.slice(0, 6).map((s) => s.id);
+  return {
+    version: "embedded",
+    generatedAt: new Date().toISOString(),
+    knowledgeBase: embedded,
+    officialSources: embedded,
+    fallbackSourceIds,
+  };
+}
+
 function loadFromLocalStorage(): KnowledgeSnapshot | null {
   if (typeof window === "undefined") return null;
   try {
@@ -108,6 +144,7 @@ async function loadFromCacheOrNetwork(): Promise<KnowledgeSnapshot> {
 }
 
 async function fetchFromNetwork(): Promise<KnowledgeSnapshot> {
+  if (typeof window === "undefined") return createEmptySnapshot();
   const url = "/data/knowledge.json";
   try {
     const resp = await fetch(url, { cache: "no-store" });

@@ -279,6 +279,10 @@ export async function answerChat(
     };
   }
   const matches = retrieveKnowledge(question, 4, request.messages);
+(globalThis as Record<string, unknown>).__debug_matches = matches.length;
+(globalThis as Record<string, unknown>).__debug_risk = risk;
+(globalThis as Record<string, unknown>).__debug_hasConfig = Boolean(dependencies.providerConfig);
+  console.log("[DEBUG chat.ts] matches.length:", matches.length, "risk:", risk, "providerConfig:", Boolean(dependencies.providerConfig));
   const answerQuality = answerQualityFor(matches);
   const sources = matches.map(({ source }) => toSourceReference(source));
   const confidence: ConfidenceLevel =
