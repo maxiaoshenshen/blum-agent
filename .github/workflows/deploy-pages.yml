@@ -35,27 +35,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (vinext static export)
+      - name: Build
+        env:
+          NEXT_PUBLIC_BASE_PATH: ""
+          NEXT_PUBLIC_SITE_URL: ${{ steps.deployment.outputs.page_url }}
+          NEXT_PUBLIC_API_BASE_URL: https://rsxermu666.cn
+          NEXT_PUBLIC_API_KEY: ${{ secrets.BLUM_API_KEY }}
+          NEXT_PUBLIC_API_MODEL: claude-opus-5
         run: npm run build
-
-      - name: Inject basePath for GitHub Pages subdirectory
-        run: |
-          python3 << 'PYTHON'
-          import os, glob
-          base_path = '/blum-agent'
-          total_replaced = 0
-          for path in glob.glob('out/**/*.html', recursive=True):
-              with open(path) as f:
-                  content = f.read()
-              before = content.count('/_next/')
-              content = content.replace('/_next/', f'{base_path}/_next/')
-              with open(path, 'w') as f:
-                  f.write(content)
-              replaced = content.count(f'{base_path}/_next/')
-              total_replaced += replaced
-              print(f'  {path}: {before} -> {replaced}')
-          print(f'Total: {total_replaced} occurrences across all HTML files')
-          PYTHON
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

@@ -11,7 +11,9 @@ import {
   type FormEvent,
 } from "react";
 import { ROLES } from "@/src/domain/roles";
+import { preloadKnowledge } from "@/src/domain/knowledge-service";
 import type { SourceReference } from "@/src/agent/chat";
+import { streamChat } from "@/src/agent/client-stream";
 import type { ChatMessage } from "@/src/agent/schema";
 import type { ConfidenceLevel, RoleId } from "@/src/domain/types";
 import {
@@ -569,6 +571,11 @@ export function BlumAgent() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  // Preload knowledge base from /data/knowledge.json (cached in localStorage).
+  useEffect(() => {
+    preloadKnowledge().catch((err) => console.error("[BlumAgent] Knowledge preload failed:", err));
+  }, []);
+
   useEffect(() => {
     // Show onboarding if user hasn't visited before
     if (localStorage.getItem("blum_has_visited") !== "true") {
@@ -941,106 +948,43 @@ export function BlumAgent() {
     };
 
     try {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const response = await fetch("/api/chat/stream", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept-Language": requestLocale === "en" ? "en" : "zh-CN" },
-            body: JSON.stringify({ role: roleId, messages: apiMessages(nextMessages), image: attachment?.dataUrl }),
-            signal: controller.signal,
-          });
-          if (!response.ok) throw await readApiError(response);
-          if (!response.body) throw new Error("Stream unavailable");
-
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-          let completed = false;
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (requestVersion !== requestVersionRef.current) { await reader.cancel(); return; }
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-            for (let i = 0; i < lines.length; i += 1) {
-              const trimmed = lines[i].trim();
-              if (!trimmed || !trimmed.startsWith("event: ")) continue;
-              const nextLine = lines[i + 1];
-              if (!nextLine?.startsWith("data: ")) continue;
-              i += 1;
-              let data: Record<string, unknown>;
-              try {
-                const parsed: unknown = JSON.parse(nextLine.slice(6).trim());
-                if (!isRecord(parsed)) continue;
-                data = parsed;
-              } catch { continue; }
-              const eventName = trimmed.slice(7).trim();
-              if (requestVersion !== requestVersionRef.current) {
-                await reader.cancel();
-                return;
-              }
-              if (eventName === "start") {
-                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, sources: asSourceReferences(data.sources) } : m));
-              } else if (eventName === "chunk") {
-                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: m.content + String(data.text ?? "") } : m));
-              } else if (eventName === "done") {
-                completed = true;
-                setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: typeof data.answer === "string" ? data.answer : "", confidence: asConfidence(data.confidence), followUps: asFollowUps(data.followUps), mode: "live", sources: asSourceReferences(data.sources) } : m));
-              } else if (eventName === "error") {
-                throw new RequestError(typeof data.code === "string" ? data.code : undefined);
-              }
-            }
-          }
-          if (!completed) throw new Error("Stream ended without completion event");
-          if (requestVersion !== requestVersionRef.current) return;
-          setAttachment(null);
-          setConnectionState("online");
-          return;
-        } catch (streamError) {
-          if (requestVersion !== requestVersionRef.current) return;
-          if (timedOut) { restoreQuestion(copy.timeoutError); return; }
-          if (streamError instanceof DOMException && streamError.name === "AbortError") return;
-          if (streamError instanceof RequestError) {
-            restoreQuestion(messageForRequestError(streamError, copy), streamError.status === 503);
-            return;
-          }
-
-          try {
-            const fallbackResponse = await fetch("/api/chat", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "Accept-Language": requestLocale === "en" ? "en" : "zh-CN" },
-              body: JSON.stringify({ role: roleId, messages: apiMessages(nextMessages), image: attachment?.dataUrl }),
-              signal: controller.signal,
-            });
-            const parsedBody: unknown = await fallbackResponse.json();
-            const body = isRecord(parsedBody) ? parsedBody : {};
-            const bodyCode = isRecord(body.error) && typeof body.error.code === "string" ? body.error.code : undefined;
-            const bodyErrorMessage = isRecord(body.error) && typeof body.error.message === "string" ? body.error.message : undefined;
-            if (!fallbackResponse.ok || typeof body.answer !== "string") {
-              const requestError = new RequestError(bodyCode, fallbackResponse.status, bodyErrorMessage);
-              restoreQuestion(messageForRequestError(requestError, copy), fallbackResponse.status === 503);
-              return;
-            }
+      let streamingFinished = false;
+      let streamingErrorMsg = "";
+      await streamChat(
+        roleId,
+        apiMessages(nextMessages) as Array<{ role: "user" | "assistant"; content: string }>,
+        attachment?.dataUrl,
+        {
+          signal: controller.signal,
+          onSources: (sources) => {
             if (requestVersion !== requestVersionRef.current) return;
-            const answer = body.answer;
-            setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: answer, confidence: asConfidence(body.confidence), followUps: asFollowUps(body.followUps), mode: asMode(body.mode), sources: asSourceReferences(body.sources) } : m));
+            setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, sources } : m));
+          },
+          onChunk: (_chunk, accumulated) => {
+            if (requestVersion !== requestVersionRef.current) return;
+            setMessages((current) => current.map((m) => m.id === streamingMsgId ? { ...m, content: accumulated } : m));
+          },
+          onDone: (result) => {
+            if (requestVersion !== requestVersionRef.current) return;
+            streamingFinished = true;
+            setMessages((current) => current.map((m) =>
+              m.id === streamingMsgId
+                ? { ...m, content: result.answer, confidence: result.confidence, followUps: result.followUps, mode: "live", sources: result.sources }
+                : m,
+            ));
             setAttachment(null);
             setConnectionState("online");
-            return;
-          } catch (fallbackError) {
+          },
+          onError: (msg) => {
             if (requestVersion !== requestVersionRef.current) return;
-            if (timedOut) { restoreQuestion(copy.timeoutError); return; }
-            if (fallbackError instanceof DOMException && fallbackError.name === "AbortError") return;
-            if (attempt === 0) {
-              setConnectionState("reconnecting");
-              await new Promise<void>((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
-              continue;
-            }
-            restoreQuestion(messageForRequestError(fallbackError, copy), true);
-            return;
-          }
-        }
+            streamingErrorMsg = msg;
+          },
+        },
+      );
+      if (requestVersion !== requestVersionRef.current) return;
+      if (!streamingFinished && streamingErrorMsg) {
+        restoreQuestion(streamingErrorMsg);
+        return;
       }
     } finally {
       window.clearTimeout(timeout);

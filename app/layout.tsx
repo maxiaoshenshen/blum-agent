@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Noto_Sans_SC } from "next/font/google";
-import { publicSiteUrlFromEnvironment } from "@/src/security/site-url";
 import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 
@@ -21,7 +20,13 @@ const plexMono = IBM_Plex_Mono({
 const title = "Blum Agent｜百隆五金智能工作台";
 const description =
   "面向设计师、销售、安装工、生产、采购和消费者的百隆五金专业助手，提供官方资料优先、风险分级的产品与应用建议。";
-const siteUrl = "https://blum-agent-cn.maxiaoshen.chatgpt.site";
+
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://xiaoshen.ai";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://rsxermu666.cn";
+const apiKey = process.env.NEXT_PUBLIC_API_KEY ?? "";
+const apiModel = process.env.NEXT_PUBLIC_API_MODEL ?? "claude-opus-5";
+const metadataBase = new URL(siteUrl);
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -36,9 +41,7 @@ const jsonLd = {
 };
 
 export function generateMetadata(): Metadata {
-  const metadataBase = publicSiteUrlFromEnvironment();
-  const socialImage = new URL("/og.png", metadataBase).href;
-
+  const socialImage = new URL(`${basePath}/og.png`, metadataBase).href;
   return {
     metadataBase,
     title,
@@ -52,8 +55,8 @@ export function generateMetadata(): Metadata {
     ],
     alternates: { canonical: "/" },
     icons: {
-      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-      apple: "/favicon.svg",
+      icon: [{ url: `${basePath}/favicon.svg`, type: "image/svg+xml" }],
+      apple: `${basePath}/favicon.svg`,
     },
     openGraph: {
       title, description, type: "website",
@@ -71,7 +74,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="zh-CN">
       <head>
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href={`${basePath}/manifest.json`} />
         <meta name="theme-color" content="#ef561f" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -79,6 +82,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__ENV__=${JSON.stringify({
+              apiBaseUrl,
+              apiKey,
+              apiModel,
+              siteUrl,
+              basePath,
+            })};`,
+          }}
         />
       </head>
       <body className={`${notoSans.variable} ${plexMono.variable}`}>
@@ -88,8 +102,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         >
           {children}
         </ErrorBoundary>
-              <script dangerouslySetInnerHTML={{ __html: `if ("serviceWorker" in navigator) { window.addEventListener("load", function() { navigator.serviceWorker.register("/sw.js").catch(function(err) { console.warn("SW registration failed:", err); }); }); }` }} />
-\n      </body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if ("serviceWorker" in navigator) { window.addEventListener("load", function() { navigator.serviceWorker.register("${basePath}/sw.js").catch(function(err) { console.warn("SW registration failed:", err); }); }); }`,
+          }}
+        />
+      </body>
     </html>
   );
 }
