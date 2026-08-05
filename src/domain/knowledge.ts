@@ -257,8 +257,6 @@ export const KNOWLEDGE_BASE = [
     official: true,
     keywords: ["Blum 规格书", "设计师指南", "选型规范", "specification guide"],
   },
-
-  // === 生产端：质量与包装 ===
   {
     id: "quality-incoming-inspection",
     title: "来料检验标准与检验方法",
@@ -299,8 +297,6 @@ export const KNOWLEDGE_BASE = [
     official: true,
     keywords: ["装配缺陷预防", "安装常见错误", "铰链安装问题规避", "assembly defect prevention"],
   },
-
-  // === 采购端：编码与料号 ===
   {
     id: "part-number-coding-deep-dive",
     title: "Blum 料号编码规则深度解析",
@@ -341,8 +337,6 @@ export const KNOWLEDGE_BASE = [
     official: true,
     keywords: ["正品采购", "辨别真假", "授权经销商", "fake vs genuine", "Blum防伪"],
   },
-
-  // === 消费者：FAQ 与维护 ===
   {
     id: "consumer-hinge-door-squeak-fix",
     title: "铰链异响了自己能修吗？",
@@ -391,8 +385,6 @@ export const KNOWLEDGE_BASE = [
     official: true,
     keywords: ["保修政策", "Blum保修期", "理赔流程", "warranty claims", "售后维修"],
   },
-
-  // === 设计师：特殊场景 ===
   {
     id: "island-counter-application-guide",
     title: "岛台五金选型：岛台开放柜的特殊要求",
@@ -497,7 +489,150 @@ export const KNOWLEDGE_BASE = [
     official: true,
     keywords: ["无障碍设计", "通用设计", "人体工学橱柜", "universal design cabinets", "适老化设计"],
   },
-
+  {
+    id: "movento- runners-features",
+    title: "MOVENTO/TANDEM 导轨功能特点与选型对照",
+    url: "https://www.blum.com/cn/products/runners-systems/movento/",
+    summary: "MOVENTO（75 kg）和 TANDEM（30 kg）是 Blum 两大导轨系列。MOVENTO 为四轴内置阻尼导轨，全行程同步开合，适合重型抽屉（≥ 40 kg 负载）；TANDEM 为两轴有阻尼或无阻尼导轨，适合轻中量抽屉。两者均支持 TIP-ON 碰碰开集成（型号尾缀 TIP 表示）。选型要点：确定抽屉内宽和面板厚度；确认所需负载；确认是否需要 TIP-ON 或 SERVO-DRIVE 电动。",
+    official: true,
+    keywords: ["MOVENTO 导轨", "TANDEM 导轨", "runner system", "四轴导轨", "两轴导轨", "load capacity", "阻尼导轨"],
+  },
+  {
+    id: "movento-servo-integration",
+    title: "MOVENTO SERVO-DRIVE 电动开合集成方案",
+    url: "https://www.blum.com/cn/products/runners-systems/movento/",
+    summary: "MOVENTO 可通过 SERVO-DRIVE 电动系统实现电动开合。集成规格：适配 MOVENTO 760H/780H 全系列；电压 DC 24 V；最大功耗 30 W/抽屉；支持无线开关或接触传感器触发；可与 BLUMOTION 阻尼同步，运行速度 3~8 mm/s 可调。安装注意：确认电源线走向和固定方式；建议使用 Blum 指定的控制单元（TC/CC）；与 TIP-ON 不可同时使用。",
+    official: true,
+    keywords: ["MOVENTO SERVO-DRIVE", "电动抽屉", "电动导轨", "TC控制单元", "servo drive integration"],
+  },
+  {
+    id: "tandembox-runners-comparison",
+    title: "TANDEMBOX / TANDEM 抽屉导轨选型对照",
+    url: "https://www.blum.com/cn/products/runners-systems/",
+    summary: "TANDEMBOX 是 Blum 抽屉系统（内置侧壁 + 导轨一体化），TANDEM 是独立导轨（需另配侧壁）。TANDEMBOX 结构：侧壁即是导轨轨槽，节省 26 mm/侧 的安装宽度；标准高度 N（80 mm）、K（150 mm）、C（外露式）。TANDEMBOX 不包含阻尼，需另配 BLUMOTION 组件（侧装或底装）。选型注意：TANDEMBOX 适合标准柜体，异形柜或超宽抽屉建议使用独立 TANDEM + 定制侧壁。",
+    official: true,
+    keywords: ["TANDEMBOX", "TANDEM 导轨", "一体式抽屉", "侧装导轨", "tandembox structure"],
+  },
+  {
+    id: "drawer-runner-depth-selection",
+    title: "抽屉导轨深度选型与柜体深度配合",
+    url: "https://www.blum.com/cn/products/runners-systems/",
+    summary: "导轨深度（标称尺寸：270/320/400/450/500/550/600/650 mm）应小于柜体内深 30~35 mm（预留门板铰链让位和安装空间）。计算公式：导轨深度 = 柜体内深 - 35 mm。例如：柜体内深 560 mm → 选 520 mm 导轨。注意事项：导轨过深会导致抽屉关闭时撞击门板；导轨过浅会降低有效抽屉深度；铰链底座高度（0/9/18 mm）也影响深度配合，应在选型时一并确认。",
+    official: true,
+    keywords: ["导轨深度选型", "柜体深度配合", "深度计算", "drawer depth selection", "cabinet depth"],
+  },
+  {
+    id: "hinge-troubleshooting-table",
+    title: "铰链常见故障排查速查表",
+    url: "https://www.blum.com/cn/support/",
+    summary: "① 门板关不上/关不紧：检查铰链是否装反（左右件）、调节螺丝是否过紧、铰链底座是否松动；② 门板间隙不均：三维调节（高度 ±2mm，左右 ±2mm，深度 +3/-2mm）；③ 开门异响：检查铰链杯孔是否正确嵌入、是否有异物、BLUMOTION 机构是否损坏；④ 门板下垂：检查铰链安装螺丝是否松动、门板是否变形；⑤ 铰链脱落：检查是否是 CLIP 安装方式（铰链臂未卡入底座卡槽）；⑥ 阻尼失效：BLUMOTION 不可调节，确认是否在阻尼有效温度范围（-15°C ~ +60°C）。",
+    official: true,
+    keywords: ["铰链故障排查", "门板关不上", "门板下垂", "铰链异响", "调节教程", "hinge troubleshooting", "trouble shooting"],
+  },
+  {
+    id: "drawer-troubleshooting",
+    title: "抽屉常见问题与解决方案",
+    url: "https://www.blum.com/cn/support/",
+    summary: "① 抽屉推拉卡顿：检查导轨是否正确安装（左右对称）、抽屉底部是否有异物、导轨滑轨是否变形；② 抽屉自动弹出/关闭过快：检查是否为阻尼导轨，BLUMOTION 阻尼不可调节，需确认温度范围（>-15°C）；③ 抽屉有异响：涂少量石蜡蜡或硅脂于导轨滚轮，切勿使用机油（会吸附灰尘）；④ 抽屉无法完全关闭：检查是否有物品卡住、导轨锁定机构是否处于锁定位置；⑤ 抽屉松旷/晃动：检查安装螺丝是否紧固、侧壁是否变形；⑥ TIP-ON 不灵敏：检查触发器位置是否正确（居中安装于抽屉前板内侧），触发距离是否在 3~7 mm 范围内。",
+    official: true,
+    keywords: ["抽屉故障", "抽屉卡顿", "抽屉异响", "TIP-ON 调节", "drawer troubleshooting"],
+  },
+  {
+    id: "aventos-troubleshooting",
+    title: "AVENTOS 上翻门常见问题速查",
+    url: "https://www.blum.com/cn/products/lift-systems/",
+    summary: "① 上翻门无法上翻/掉下来：检查气压弹簧安装方向是否正确（左/右件不可互换）、弹簧是否漏气（静压测试：门板应可在任意位置停留 3 秒以上）；② 门板开合不顺：检查连杆铰链（A款/B款/C款）是否与门板重量匹配；③ 门板开不到最大角度：检查限位器是否被误调；④ 上翻门有噪音：检查连杆关节是否有异物，涂少许硅脂；⑤ 维修提示：气压弹簧不可自行充气或维修，必须整套更换；更换时必须先释放弹簧气压（AVENTOS HK/S限制器操作法）。",
+    official: true,
+    keywords: ["AVENTOS 故障", "气压弹簧", "上翻门问题", "门板掉下", "aventos troubleshooting"],
+  },
+  {
+    id: "servo-drive-components",
+    title: "SERVO-DRIVE 系统组件与连接图解",
+    url: "https://www.blum.com/cn/products/electric-motion/",
+    summary: "SERVO-DRIVE 系统由以下组件构成：① 控制单元（TC / CC）：主控制器，最多可级联 4 个 CC 子单元；② 驱动单元：安装在 MOVENTO 导轨或 AVENTOS 铰链上的电机；③ 电源：DC 24 V 外接电源，最大输出电流根据驱动数量计算（每台 MOVENTO SERVO 约 2 A）；④ 传感器/开关：可选手动轻触开关、红外感应或门磁触发；⑤ 线缆：扁排线连接（预组装），线缆总长不超过 10 m（信号衰减限制）。系统安装注意：电源线和信号线分开走线，避免电磁干扰；每个 CC 控制单元最多连接 3 个驱动单元。",
+    official: true,
+    keywords: ["SERVO-DRIVE 组件", "TC控制单元", "CC控制单元", "电机安装", "servo drive system", "power supply"],
+  },
+  {
+    id: "servo-drive-programming",
+    title: "SERVO-DRIVE 参数设置与行程调试",
+    url: "https://www.blum.com/cn/products/electric-motion/",
+    summary: "SERVO-DRIVE 的行程和力度通过机械限位器设置，非软件调节：① 开合行程：AVENTOS 上翻通过连杆上的限位螺钉调节（限位销位置决定最大开合角度）；MOVENTO 抽屉通过导轨末端的机械止动块调节；② 开合力度：AVENTOS 气压弹簧力度在出厂时已按门板重量匹配（不可调），MOVENTO 力度通过控制单元参数微调；③ 速度设置：控制单元上有 DIP 开关可选择标准速度/轻柔速度；④ 编程说明：SERVO-DRIVE 基础版不支持复杂编程，进阶版支持通过 BlumEasyTouch 应用程序进行个性化设置。",
+    official: true,
+    keywords: ["SERVO-DRIVE 调试", "行程设置", "力度调节", "控制单元", "AVENTOS SERVO"],
+  },
+  {
+    id: "revego-installation-sequence",
+    title: "REVEGO 口袋门安装步骤与注意事项",
+    url: "https://www.blum.com/cn/products/pocket-doors/",
+    summary: "安装顺序：① 确认柜体方正（对角线误差 < 2 mm/m）；② 安装导轨（REVEGO 轨）：用专用夹具固定，确保水平（气泡仪校正）；③ 安装滑轮单元：确认左/右件，滑轮凸台朝外；④ 挂门：将门板挂入滑轮，确认卡扣锁紧；⑤ 调节：使用随机附带的调节工具，调整门的水平和垂直度；⑥ 安装缓冲器（BLUMOTION）：确认方向正确。注意事项：REVEGO 门板最大重量 25 kg/扇；导轨最大跨度 3 m（超出需加支撑）；门板与导轨间隙至少 3 mm。",
+    official: true,
+    keywords: ["REVEGO 安装", "口袋门安装", "导轨安装", "门板悬挂", "revego installation"],
+  },
+  {
+    id: "revego-load-and-application",
+    title: "REVEGO 适用场景与承重规范",
+    url: "https://www.blum.com/cn/products/pocket-doors/",
+    summary: "REVEGO 适用场景：衣柜侧面移门、厨房高柜口袋门、书柜隐藏门。承重规范：单扇门最大重量 25 kg；推荐使用铝蜂窝门板（轻质高强）；木门板最大宽度 1 200 mm，高度不超过 3 000 mm；玻璃门板需用玻璃夹款 REVEGO（最大 15 kg）。不适用场景：承重墙/砌体墙外的门（需独立门框）；室外（防潮要求超出标准配置）；推拉频率超过 50 次/天的商业环境（建议加装增强型滑轮）。",
+    official: true,
+    keywords: ["REVEGO 承重", "口袋门应用", "门板重量", "适用范围", "revego load"],
+  },
+  {
+    id: "orgaline-integration-guides",
+    title: "ORGA-LINE 内分隔与抽屉系统集成指南",
+    url: "https://www.blum.com/cn/products/organizers/",
+    summary: "ORGA-LINE 是一套内分隔配件（分隔盒、刀叉盘、瓶架、CD 架等），可嵌入 LEGRABOX / TANDEMBOX 抽屉内部。集成要点：① 宽度适配：ORGA-LINE 分隔盒宽度系列为 83/100/150/200/275/350 mm，选型时需确认抽屉内宽减去左右侧壁各 26 mm；② 安装方式：使用 Blum 原装连接件（SYNCHRO BOXED），先在抽屉底板预钻 5 mm 孔，深度 12 mm；③ 防滑处理：ORGA-LINE 底座有硅胶防滑点，但高湿度环境建议额外加固；④ 定制：ORGA-LINE 提供标准品，异形柜建议使用可裁切式 ORGA-LINE FLEX（可按需裁切）。",
+    official: true,
+    keywords: ["ORGA-LINE", "内分隔", "抽屉收纳", "分隔盒集成", "orgaline integration"],
+  },
+  {
+    id: "bxf-cam-integration",
+    title: "BXF 文件格式与 CAM 软件集成说明",
+    url: "https://www.blum.com/cn/services/cad-downloads/",
+    summary: "BXF（Blum eXchange Format）是 Blum 专用的加工数据交换格式，用于将 Blum 产品孔位信息导入 CNC 加工中心。文件结构：① 头文件区（HDR）：包含柜体编号、孔位坐标系原点；② 加工指令区（INS）：包含钻孔坐标（X/Y/Z）、钻头型号、沉孔深度；③ 注释区（NOTE）：可自定义加工备注。BXF 兼容软件：WoodWOP、Mentor/BCAD、IMOS、Cutrite、Success、Router-CIM。注意事项：BXF 坐标单位为 mm（小数点后 3 位）；钻孔顺序应按 Z 轴分层（先深后浅）；铝蜂窝门板加工需使用专用硬质合金钻头（推荐品牌：VHM），普通木工钻头易磨损。",
+    official: true,
+    keywords: ["BXF 文件", "CAM 集成", "钻孔数据", "数控加工", "WoodWOP", "bxf format"],
+  },
+  {
+    id: "drilling-tolerances",
+    title: "Blum 产品钻孔公差规范",
+    url: "https://www.blum.com/cn/products/",
+    summary: "Blum 孔位公差要求：① 杯孔（∅ 35 mm）：直径公差 +0.1/+0.2 mm，深度公差 ±0.3 mm，杯孔垂直度误差 < 0.5°；② 底座安装孔（∅ 5 mm）：位置公差 ±0.5 mm（相对于杯孔中心线），孔深 +0.5 mm；③ 预组装孔（∅ 8 mm，用于 BLUMOTION 组件）：位置公差 ±0.3 mm；④ 侧壁固定孔（∅ 3 mm 迷你预装）：位置公差 ±0.5 mm。公差超差影响：杯孔过大会导致铰链松动（影响 3D 调节范围）；深度过深会导致穿透门板外观面；建议使用数控钻孔确保一致性。",
+    official: true,
+    keywords: ["钻孔公差", "孔位规范", "加工精度", "drilling tolerance", "cnc machining"],
+  },
+  {
+    id: "hinge-selection-by-application",
+    title: "按应用场景选铰链快速指南",
+    url: "https://www.blum.com/cn/products/hinges/",
+    summary: "按场景推荐：① 厨房吊柜（常规门板 15~22 mm）：CLIP top BLUMOTION 110° 半盖（标准选型）；② 高柜大门（高度 > 1 200 mm）：CLIP top BLUMOTION 155° 超大角度（便于大件物品取放）；③ 浴柜（潮湿环境）：建议选镍色防腐版本（型号尾缀 NI），并在铰链杯内点涂防锈油脂；④ 铝合金门：使用 CLIP top 铝合金门专用款（底座型号以 AL 结尾），铰链杯径 35 mm 与木质门通用；⑤ 无把手设计：选配 TIP-ON 集成款（型号尾缀 BLUMOTION + TIPON 或单独 TIPON）；⑥ 超重门板（> 30 kg）：建议使用 3 孔加强底座 + 4 个铰链。",
+    official: true,
+    keywords: ["铰链选型", "应用场景", "厨房铰链", "铝合金门", "无把手", "hinge selection guide"],
+  },
+  {
+    id: "blumotion-vs-tipon-comparison",
+    title: "BLUMOTION 阻尼 vs TIP-ON 碰碰开 — 区别与选型",
+    url: "https://www.blum.com/cn/products/hinges/",
+    summary: "BLUMOTION（内置阻尼）和 TIP-ON（无把手碰碰开）是两个独立功能，可单独或组合使用。单独 BLUMOTION：适合有把手门板，铰链内置阻尼，关门轻柔无声；不适合无把手设计。单独 TIP-ON：适合无把手门板，按压即开（碰碰开），关门仍需轻推；不适合超大重门板（> 40 kg）。组合款（BLUMOTION + TIPON）：既可无把手碰碰开，关闭时又有阻尼效果；推荐用于无把手厨房吊柜（重量 5~30 kg）。注意：TIP-ON 不适用于极端温度（<-15°C 或 >+60°C）；重负荷抽屉推荐使用 SERVO-DRIVE 替代 TIP-ON。",
+    official: true,
+    keywords: ["BLUMOTION 对比", "TIP-ON", "阻尼选型", "无把手设计", "blumotion vs tip-on"],
+  },
+  {
+    id: "consumer-drawer-maintenance",
+    title: "消费者：抽屉日常保养与常见问题处理",
+    url: "https://www.blum.com/cn/consumers/",
+    summary: "日常保养：① 每季度用干布擦拭导轨滚轮，去除积灰；② 如有轻微卡顿，在滑轨外侧涂一层薄蜡（石蜡或蜡烛切忌机油）；③ 检查抽屉固定螺丝是否松动，如有则重新紧固（力矩 1.5~2 N·m）。常见问题自查：① 抽屉关不上：检查是否有物品卡住、导轨是否变形；② 抽屉有响声：在滑轨接触面涂蜡即可；③ 抽屉不顺畅：可能是导轨内滚轮磨损（需专业维修或更换）；④ 抽屉门板掉了：请勿自行安装，联系专业安装人员或 Blum 客服。",
+    official: true,
+    keywords: ["抽屉保养", "消费者维护", "日常使用", "抽屉保养", "drawer maintenance consumer"],
+  },
+  {
+    id: "consumer-cabinet-care",
+    title: "消费者：整体橱柜五金日常使用注意事项",
+    url: "https://www.blum.com/cn/consumers/",
+    summary: "使用注意事项：① 铰链调节：门板松动时可自行微调（高度 ±2mm，左右 ±2mm），使用十字螺丝刀顺时针紧固调节螺丝；② 防潮：浴室柜每次使用后擦干表面，潮湿季节可在柜内放置干燥剂；③ 避免超载：铰链式门板承重参考铰链型号说明（一般 ≤ 30 kg/扇），超重会导致门板下垂或铰链损坏；④ 安全提示：铰链和导轨内有金属弹簧，切勿自行拆解；⑤ 产品注册：购买后可在 blum.com/cn 注册产品，获取延保（标准 2 年，注册后 +1 年）。",
+    official: true,
+    keywords: ["橱柜使用", "消费者指南", "五金保养", "铰链调节", "产品注册"],
+  },
 ] as const satisfies readonly OfficialSource[];
 
 export const OFFICIAL_SOURCES: readonly OfficialSource[] = Object.freeze([

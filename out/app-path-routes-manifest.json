@@ -1,9 +1,0 @@
-{
-  "/_global-error/page": "/_global-error",
-  "/_not-found/page": "/_not-found",
-  "/api/chat/route": "/api/chat",
-  "/api/chat/stream/route": "/api/chat/stream",
-  "/api/feedback/route": "/api/feedback",
-  "/api/health/route": "/api/health",
-  "/page": "/"
-}

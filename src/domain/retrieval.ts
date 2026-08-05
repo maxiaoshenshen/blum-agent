@@ -33,6 +33,7 @@ let _sourcesById: Map<string, OfficialSource> | null = null;
 function ensureIndexes(): void {
   if (_preparedSources !== null) return;
   const sources = getAllSources();
+  buildBm25Index();
   _sourcesById = new Map(sources.map((s) => [s.id, s]));
 
   const prepared: PreparedSource[] = [];
@@ -294,8 +295,14 @@ export function retrieveKnowledge(
     );
     const historyBoost = followUp && historyProductIds.has(source.id) ? 100 : 0;
     const semanticScore = semanticSimilarityScore(sourceCategory, category);
+    const keywordScore = matchedKeywords.reduce((total, kw) => total + scoreKeyword(kw), 0);
+    const bm25 = bm25Score(
+      [...normalizedKeywords.map((k) => k.normalized), source.id],
+      normalizedQuestion.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
+    );
     const score =
-      matchedKeywords.reduce((total, kw) => total + scoreKeyword(kw), 0) +
+      keywordScore +
+      bm25 * 2 +
       (category === sourceCategory ? 3 : 0) +
       (category !== undefined && isProductFamilySource(source, category) ? 6 : 0) +
       semanticScore;
@@ -334,4 +341,67 @@ export function retrieveKnowledge(
 export function classifyRisk(question: string): RiskLevel {
   const normalized = normalize(question);
   return precisionPatterns.some((p) => p.test(normalized)) ? "precision" : "standard";
+}
+
+// ─── BM25 hybrid scoring ─────────────────────────────────────────────────────
+
+const BM25_K1 = 1.5;
+const BM25_B = 0.75;
+
+let _bm25Idf: Map<string, number> | null = null;
+let _avgDocLen = 0;
+let _bm25Initialized = false;
+
+function tokenizeAscii(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 2);
+}
+
+function buildBm25Index(): void {
+  if (_bm25Initialized) return;
+  _bm25Initialized = true;
+  const docs: string[][] = [];
+  for (const source of getAllSources()) {
+    const text = `${source.id} ${source.title} ${source.summary} ${source.keywords.join(" ")}`;
+    docs.push(tokenizeAscii(text));
+  }
+  if (docs.length === 0) return;
+
+  const N = docs.length;
+  const df = new Map<string, number>();
+  for (const doc of docs) {
+    const seen = new Set(doc);
+    for (const term of seen) {
+      df.set(term, (df.get(term) ?? 0) + 1);
+    }
+  }
+  _bm25Idf = new Map();
+  for (const [term, freq] of df) {
+    _bm25Idf.set(term, Math.log((N - freq + 0.5) / (freq + 0.5) + 1));
+  }
+  const totalTokens = docs.reduce((sum, d) => sum + d.length, 0);
+  _avgDocLen = totalTokens / N;
+}
+
+function bm25Score(docTokens: string[], queryTokens: string[]): number {
+  if (!_bm25Idf || _avgDocLen === 0) return 0;
+  const docLen = docTokens.length;
+  const tf = new Map<string, number>();
+  for (const term of docTokens) tf.set(term, (tf.get(term) ?? 0) + 1);
+  let score = 0;
+  for (const term of queryTokens) {
+    const idf = _bm25Idf.get(term) ?? 0;
+    const f = tf.get(term) ?? 0;
+    score += idf * (f * (BM25_K1 + 1)) / (f + BM25_K1 * (1 - BM25_B + BM25_B * docLen / _avgDocLen));
+  }
+  return score;
+}
+
+export function resetBm25Index(): void {
+  _bm25Idf = null;
+  _avgDocLen = 0;
+  _bm25Initialized = false;
 }

@@ -26,3 +26,6 @@ output/playwright/
 .next.bak/
 out/
 
+out/
+blum-deploy.tar
+blum-deploy.tar.gz

@@ -2716,3 +2716,34 @@ button {
   color: var(--accent-secondary);
 }
 
+
+/* R4: Knowledge version indicator */
+.knowledge-version {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--muted);
+  border: 1px solid var(--line-strong);
+  padding: 3px 7px;
+  cursor: default;
+  transition: color .16s, border-color .16s;
+}
+.knowledge-version:hover {
+  color: var(--ink-soft);
+  border-color: var(--signal);
+}
+.knowledge-loading {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--muted);
+  border: 1px dashed var(--line-strong);
+  padding: 3px 7px;
+  animation: knowledge-load-pulse 1.2s ease-in-out infinite;
+}
+@keyframes knowledge-load-pulse {
+  0%, 100% { opacity: .5; }
+  50% { opacity: 1; }
+}
